@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KeepLocal - Engineering Architecture & Implementation Roadmap</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --card-bg: #161920;
+      --border: #262c3a;
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --accent-amber: #f59e0b;
+      --accent-cyan: #06b6d4;
+      --accent-green: #10b981;
+      --code-bg: #1e2430;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 32px 20px;
+      max-width: 1040px;
+      margin: 0 auto;
+    }
+
+    h1, h2, h3, h4 {
+      color: #fff;
+      font-weight: 600;
+    }
+
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .badge {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--accent-amber);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    p.subtitle {
+      color: var(--text-muted);
+      font-size: 1.05rem;
+      margin-bottom: 32px;
+    }
+
+    h2 {
+      font-size: 1.35rem;
+      margin: 36px 0 16px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    h3 {
+      font-size: 1.1rem;
+      margin: 20px 0 10px;
+      color: #f1f5f9;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 16px;
+    }
+
+    ul {
+      margin-left: 20px;
+      margin-bottom: 12px;
+    }
+
+    li {
+      margin-bottom: 6px;
+    }
+
+    strong {
+      color: #fff;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      background: var(--code-bg);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.88rem;
+      color: var(--accent-cyan);
+    }
+
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      padding: 14px;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      color: #e2e8f0;
+      margin: 12px 0 16px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      background: var(--card-bg);
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    th, td {
+      padding: 12px 14px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+
+    th {
+      background: #1c202a;
+      color: #fff;
+      font-weight: 600;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    .phase-badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .phase-1 { background: rgba(6, 182, 212, 0.15); color: var(--accent-cyan); }
+    .phase-2 { background: rgba(245, 158, 11, 0.15); color: var(--accent-amber); }
+    .phase-3 { background: rgba(16, 185, 129, 0.15); color: var(--accent-green); }
+    .phase-4 { background: rgba(168, 85, 247, 0.15); color: #c084fc; }
+
+    .checklist {
+      list-style: none;
+      margin-left: 0;
+    }
+
+    .checklist li {
+      position: relative;
+      padding-left: 26px;
+      margin-bottom: 8px;
+    }
+
+    .checklist li::before {
+      content: "☐";
+      position: absolute;
+      left: 0;
+      top: 0;
+      color: var(--accent-amber);
+      font-size: 1.1rem;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>KeepLocal <span class="badge">Architecture & Roadmap</span></h1>
+    <p class="subtitle">A privacy-first, offline Android note-taking application powered by on-device EmbeddingGemma, signature-protected inter-app model sharing, and local NAS network backups.</p>
+  </header>
+
+  <section>
+    <h2>1. System Architecture & Constraints</h2>
+    <div class="card">
+      <pre>
+┌────────────────────────────────────────────────────────────────────────┐
+│                        KeepLocal (Android Client)                      │
+├────────────────────────────────────────────────────────────────────────┤
+│ UI Layer: Jetpack Compose (Staggered Grid, Pinning, Markdown, Tasks)   │
+│ Persistence: Room SQLite + FTS5 Full-Text Virtual Table                │
+│ Inference: Google LiteRT (EmbeddingGemma QAT INT8 .tflite, 128-dim)   │
+│ Network Access: STRICTLY LAN-ONLY (SMB 2/3 Backup via smbj, No Cloud)  │
+└──────────────────┬─────────────────────────────┬───────────────────────┘
+                   │                             │
+                   ▼                             ▼
+   ┌──────────────────────────────┐    ┌─────────────────────────────────┐
+   │    Local Storage & Cache     │    │       Signature FileProvider    │
+   │  /files/models/              │    │  Authority:                     │
+   │  embeddinggemma_qat_int8     │───►│  com.example.keeplocal.provider │
+   └──────────────────────────────┘    └────────────────┬────────────────┘
+                                                        │ ParcelFileDescriptor
+                                                        ▼
+                                       ┌─────────────────────────────────┐
+                                       │     Other Custom Ecosystem Apps │
+                                       │  (Same Keystore Signature Only) │
+                                       └─────────────────────────────────┘</pre>
+
+      <div class="grid">
+        <div>
+          <h3>Core Platform Targets</h3>
+          <ul>
+            <li><strong>Target SDK:</strong> Android 14+ (minSdk 26)</li>
+            <li><strong>UI Framework:</strong> Jetpack Compose + Material 3 (Dark Theme default)</li>
+            <li><strong>Database:</strong> Android Room with SQLite FTS5 extension</li>
+            <li><strong>Runtime:</strong> Google LiteRT (<code>com.google.ai.edge.litert</code>)</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Zero-Cloud Sandbox Invariants</h3>
+          <ul>
+            <li>No external cloud telemetry, accounts, or analytics services.</li>
+            <li>Model file downloaded on-demand once, verified via SHA-256 hash, then retained locally.</li>
+            <li>Backup operations communicate exclusively with local SMB/Samba network shares.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>2. Persistence & Vector Index Schema</h2>
+    <div class="card">
+      <p>EmbeddingGemma produces 768-dimensional embeddings by default. Using Matryoshka Representation Learning (MRL), output tensors are sliced down to 128 dimensions, packed into 512-byte binary blobs, and persisted in Room.</p>
+      
+      <pre>
+// 1. Core Note Record
+@Entity(tableName = "notes")
+data class NoteEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val title: String,
+    val content: String,
+    val noteType: NoteType,             // TEXT, CHECKLIST, PROJECT_TASK, EVENT
+    val isPinned: Boolean = false,
+    val isArchived: Boolean = false,
+    val reminderEpochMs: Long? = null,
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+// 2. Vector Store (128-dim FP32 = 512 bytes per record)
+@Entity(
+    tableName = "note_embeddings",
+    foreignKeys = [
+        ForeignKey(
+            entity = NoteEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["noteId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index(value = ["noteId"], unique = true)]
+)
+data class NoteEmbeddingEntity(
+    @PrimaryKey val noteId: Long,
+    @ColumnInfo(typeAffinity = ColumnInfo.BLOB) val vector: ByteArray,
+    val dimensions: Int = 128,
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+// 3. FTS5 Virtual Table for Exact Keywords & Symbols
+@Fts4(contentEntity = NoteEntity::class)
+@Entity(tableName = "notes_fts")
+data class NoteFtsEntity(
+    val title: String,
+    val content: String
+)</pre>
+    </div>
+  </section>
+
+  <section>
+    <h2>3. Vector Pipeline & Model Sharing Specifications</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>Asymmetric Task Framing</h3>
+        <p>To avoid representation drift between questions and indexed notes, all inputs are formatted with prompt task prefixes before inference:</p>
+        <pre>
+// Indexing Notes:
+"task: search document | text: $title. $content"
+
+// Querying Notes:
+"task: search query | query: $userQuery"</pre>
+        <p><strong>MRL Slicing:</strong> Truncate LiteRT output array to <code>rawOutput.copyOfRange(0, 128)</code> and normalize with Euclidean L2 norm.</p>
+      </div>
+
+      <div class="card">
+        <h3>Signature FileProvider Contract</h3>
+        <p>Exposes weights to companion apps signed by the same keystore without duplicating the ~180MB file:</p>
+        <pre>
+&lt;permission
+    android:name="com.example.keeplocal.READ_MODEL"
+    android:protectionLevel="signature" /&gt;
+
+&lt;provider
+    android:name="androidx.core.content.FileProvider"
+    android:authorities="com.example.keeplocal.modelprovider"
+    android:exported="true"
+    android:readPermission="com.example.keeplocal.READ_MODEL"&gt;
+    &lt;meta-data
+        android:name="android.support.FILE_PROVIDER_PATHS"
+        android:resource="@xml/file_paths" /&gt;
+&lt;/provider&gt;</pre>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>4. Local NAS Backup Integration (SMB 2/3)</h2>
+    <div class="card">
+      <div class="grid">
+        <div>
+          <h3>Protocol & Dependencies</h3>
+          <ul>
+            <li><strong>Client Engine:</strong> <code>com.hierynomus:smbj:0.13.0</code></li>
+            <li><strong>Credential Storage:</strong> Android <code>EncryptedSharedPreferences</code></li>
+            <li><strong>Execution:</strong> <code>WorkManager</code> (Wi-Fi connected + device charging triggers)</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Archive Payload Composition</h3>
+          <ul>
+            <li><code>manifest.json</code>: Schema metadata, device ID, timestamp, SHA-256</li>
+            <li><code>notes.json</code>: Complete export of <code>NoteEntity</code> table</li>
+            <li><code>attachments/</code>: Embedded photos and voice recordings</li>
+            <li><em>Note: Excludes vector blobs to keep backups tiny; vectors are recomputed automatically upon restore.</em></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>5. Implementation Roadmap for Google Jules</h2>
+
+    <div class="card">
+      <span class="phase-badge phase-1">Phase 1</span>
+      <h3>Core Database, FTS5 & Model Provider Setup</h3>
+      <ul class="checklist">
+        <li>Initialize Android project targeting SDK 34 with Jetpack Compose and Room SQLite.</li>
+        <li>Implement <code>NoteEntity</code>, <code>NoteEmbeddingEntity</code>, and <code>NoteFtsEntity</code> schemas with corresponding DAOs.</li>
+        <li>Configure <code>FileProvider</code> in <code>AndroidManifest.xml</code> secured by <code>signature</code> protection level.</li>
+        <li>Build <code>ModelManager</code> with initial download, SHA-256 integrity verification, and atomic file commit into <code>files/models/</code>.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <span class="phase-badge phase-2">Phase 2</span>
+      <h3>LiteRT Inference Pipeline & Vector Search</h3>
+      <ul class="checklist">
+        <li>Integrate <code>com.google.ai.edge.litert</code> runtime dependencies.</li>
+        <li>Build <code>EmbeddingRepository</code> to execute inference from internal file storage or external <code>FileDescriptor</code>.</li>
+        <li>Implement MRL 128-dimension truncation, L2 vector normalization, and byte-packing utilities.</li>
+        <li>Configure a debounced <code>WorkManager</code> background worker to auto-embed new and modified notes.</li>
+        <li>Implement Reciprocal Rank Fusion (RRF) combining Room FTS5 text matches with in-memory vector dot product rankings.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <span class="phase-badge phase-3">Phase 3</span>
+      <h3>Google Keep-Style UI & Smart Features</h3>
+      <ul class="checklist">
+        <li>Implement staggered 2-column grid and single-column list views with pinned notes support in Jetpack Compose.</li>
+        <li>Build dynamic note cards supporting markdown text, interactive checklists, and labels.</li>
+        <li>Implement real-time debounced search bar with mode toggle: Hybrid (RRF), Semantic Only, and Exact Keyword.</li>
+        <li>Add a bottom "Related Context" drawer on the note editor that pulls top-3 semantic matches based on vector distance.</li>
+        <li>Build the <code>ModelSettingsScreen</code> displaying download progress, local disk usage, and SHA-256 status.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <span class="phase-badge phase-4">Phase 4</span>
+      <h3>SMB NAS Backup & Restore Engine</h3>
+      <ul class="checklist">
+        <li>Add <code>smbj</code> dependency and construct <code>SmbBackupManager</code> for LAN SMB share uploads.</li>
+        <li>Store NAS host IP, share name, username, and password in <code>EncryptedSharedPreferences</code>.</li>
+        <li>Build <code>BackupArchiver</code> to package notes and media into a compressed <code>.tar.gz</code> archive (excluding embedding blobs).</li>
+        <li>Implement <code>NasBackupWorker</code> with <code>UNMETERED</code> network and <code>CHARGING</code> constraints for automated overnight sync.</li>
+        <li>Create a "Restore from NAS" dialog to download and unpack archives, triggering an automatic background re-embedding pass.</li>
+      </ul>
+    </div>
+  </section>
+
+</body>
+</html>
