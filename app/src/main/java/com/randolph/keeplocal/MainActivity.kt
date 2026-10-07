@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Memory
@@ -48,6 +48,7 @@ import com.randolph.keeplocal.ui.notes.NotesViewModel
 import com.randolph.keeplocal.ui.settings.ModelSettingsScreen
 import com.randolph.keeplocal.ui.settings.NasBackupSettingsScreen
 import com.randolph.keeplocal.ui.theme.KeepLocalTheme
+import com.randolph.keeplocal.worker.NasBackupWorker
 
 enum class Screen {
     MAIN_NOTES,
@@ -76,6 +77,9 @@ class MainActivity : ComponentActivity() {
         smbBackupManager = SmbBackupManager(database.noteDao(), nasCredentialManager, autoEmbeddingManager = autoEmbeddingManager)
 
         viewModel = NotesViewModel(database.noteDao(), searchRepository, autoEmbeddingManager)
+
+        // Schedule automated overnight NAS backup with UNMETERED + CHARGING constraints
+        NasBackupWorker.schedulePeriodicBackup(applicationContext)
 
         setContent {
             KeepLocalTheme {
