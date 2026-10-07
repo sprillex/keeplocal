@@ -27,6 +27,7 @@ class NotesViewModel(
     val uiState: StateFlow<NotesUiState> = _uiState.asStateFlow()
 
     private var searchJob: Job? = null
+    private var relatedContextJob: Job? = null
 
     init {
         loadNotes()
@@ -84,7 +85,8 @@ class NotesViewModel(
         title: String,
         content: String,
         noteType: NoteType = NoteType.TEXT,
-        isPinned: Boolean = false
+        isPinned: Boolean = false,
+        colorHex: String? = null
     ) {
         viewModelScope.launch {
             val note = NoteEntity(
@@ -93,6 +95,7 @@ class NotesViewModel(
                 content = content,
                 noteType = noteType,
                 isPinned = isPinned,
+                colorHex = colorHex,
                 updatedAt = System.currentTimeMillis()
             )
             val savedId = noteDao.insertNote(note)
@@ -126,19 +129,25 @@ class NotesViewModel(
     fun selectNoteForEditing(note: NoteEntity?) {
         _uiState.update { it.copy(selectedNoteForEditing = note) }
         if (note != null) {
-            loadRelatedContext(note)
+            loadRelatedContextForDraft(note.title, note.content)
         } else {
             _uiState.update { it.copy(relatedContextNotes = emptyList()) }
         }
     }
 
-    private fun loadRelatedContext(note: NoteEntity) {
-        viewModelScope.launch {
-            val queryText = if (note.title.isNotBlank()) "${note.title} ${note.content}" else note.content
-            if (queryText.isBlank()) return@launch
+    fun loadRelatedContextForDraft(title: String, content: String) {
+        relatedContextJob?.cancel()
+        val queryText = if (title.isNotBlank()) "$title $content" else content
+        if (queryText.isBlank()) {
+            _uiState.update { it.copy(relatedContextNotes = emptyList()) }
+            return
+        }
 
+        relatedContextJob = viewModelScope.launch {
+            delay(200) // Debounce related context query
+            val currentId = _uiState.value.selectedNoteForEditing?.id ?: 0L
             val matches = searchRepository.executeSemanticSearch(queryText)
-                .filter { it.note.id != note.id }
+                .filter { it.note.id != currentId }
                 .take(3)
             _uiState.update { it.copy(relatedContextNotes = matches) }
         }

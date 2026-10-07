@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Memory
@@ -42,8 +41,8 @@ import com.randolph.keeplocal.data.repository.AutoEmbeddingManager
 import com.randolph.keeplocal.data.repository.EmbeddingRepository
 import com.randolph.keeplocal.data.repository.SearchRepository
 import com.randolph.keeplocal.ui.components.KeepLocalSearchBar
-import com.randolph.keeplocal.ui.components.NoteEditorDialog
 import com.randolph.keeplocal.ui.components.NoteList
+import com.randolph.keeplocal.ui.notes.NoteEditorScreen
 import com.randolph.keeplocal.ui.notes.NotesViewModel
 import com.randolph.keeplocal.ui.settings.ModelSettingsScreen
 import com.randolph.keeplocal.ui.settings.NasBackupSettingsScreen
@@ -52,6 +51,7 @@ import com.randolph.keeplocal.worker.NasBackupWorker
 
 enum class Screen {
     MAIN_NOTES,
+    NOTE_EDITOR,
     MODEL_SETTINGS,
     NAS_SETTINGS
 }
@@ -84,6 +84,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             KeepLocalTheme {
                 var currentScreen by remember { mutableStateOf(Screen.MAIN_NOTES) }
+                val uiState by viewModel.uiState.collectAsState()
 
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -92,8 +93,27 @@ class MainActivity : ComponentActivity() {
                     when (currentScreen) {
                         Screen.MAIN_NOTES -> MainNotesScreen(
                             viewModel = viewModel,
+                            onOpenEditor = { note ->
+                                viewModel.selectNoteForEditing(note)
+                                currentScreen = Screen.NOTE_EDITOR
+                            },
                             onNavigateToModelSettings = { currentScreen = Screen.MODEL_SETTINGS },
                             onNavigateToNasSettings = { currentScreen = Screen.NAS_SETTINGS }
+                        )
+                        Screen.NOTE_EDITOR -> NoteEditorScreen(
+                            note = uiState.selectedNoteForEditing,
+                            relatedContextMatches = uiState.relatedContextNotes,
+                            onBackAndSave = { id, title, content, type, isPinned, colorHex ->
+                                if (title.isNotBlank() || content.isNotBlank()) {
+                                    viewModel.saveNote(id, title, content, type, isPinned, colorHex)
+                                }
+                                currentScreen = Screen.MAIN_NOTES
+                            },
+                            onDelete = { note -> viewModel.deleteNote(note) },
+                            onArchive = { note -> viewModel.archiveNote(note) },
+                            onQueryRelatedContext = { title, content ->
+                                viewModel.loadRelatedContextForDraft(title, content)
+                            }
                         )
                         Screen.MODEL_SETTINGS -> ModelSettingsScreen(
                             modelManager = modelManager,
@@ -114,11 +134,11 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainNotesScreen(
     viewModel: NotesViewModel,
+    onOpenEditor: (note: com.randolph.keeplocal.data.local.entity.NoteEntity?) -> Unit,
     onNavigateToModelSettings: () -> Unit,
     onNavigateToNasSettings: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var isEditorOpen by remember { mutableStateOf(false) }
 
     val displayedNotes = if (uiState.searchQuery.isNotBlank()) {
         uiState.searchResults.map { it.note }
@@ -129,10 +149,7 @@ fun MainNotesScreen(
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(
-                onClick = {
-                    viewModel.selectNoteForEditing(null)
-                    isEditorOpen = true
-                },
+                onClick = { onOpenEditor(null) },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary
             ) {
@@ -205,29 +222,12 @@ fun MainNotesScreen(
                 NoteList(
                     notes = displayedNotes,
                     layoutType = uiState.layoutType,
-                    onNoteClick = { note ->
-                        viewModel.selectNoteForEditing(note)
-                        isEditorOpen = true
-                    },
+                    onNoteClick = { note -> onOpenEditor(note) },
                     onPinClick = { note -> viewModel.togglePinNote(note) },
                     onArchiveClick = { note -> viewModel.archiveNote(note) },
                     modifier = Modifier.weight(1f)
                 )
             }
-        }
-
-        if (isEditorOpen) {
-            NoteEditorDialog(
-                note = uiState.selectedNoteForEditing,
-                relatedContextMatches = uiState.relatedContextNotes,
-                onDismiss = {
-                    isEditorOpen = false
-                    viewModel.selectNoteForEditing(null)
-                },
-                onSave = { id, title, content, type ->
-                    viewModel.saveNote(id, title, content, type)
-                }
-            )
         }
     }
 }

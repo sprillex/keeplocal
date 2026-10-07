@@ -19,7 +19,7 @@ import com.randolph.keeplocal.data.local.entity.NoteFtsEntity
         NoteEmbeddingEntity::class,
         NoteFtsEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -39,6 +39,7 @@ abstract class KeepLocalDatabase : RoomDatabase() {
                     KeepLocalDatabase::class.java,
                     "keeplocal_database"
                 )
+                .fallbackToDestructiveMigration()
                 .addCallback(object : RoomDatabase.Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)

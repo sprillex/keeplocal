@@ -12,5 +12,6 @@ data class NoteEntity(
     val isPinned: Boolean = false,
     val isArchived: Boolean = false,
     val reminderEpochMs: Long? = null,
+    val colorHex: String? = null,
     val updatedAt: Long = System.currentTimeMillis()
 )
