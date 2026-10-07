@@ -11,6 +11,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import java.io.ByteArrayInputStream
 import java.io.File
 import java.security.MessageDigest
 
@@ -46,7 +47,7 @@ class ModelManagerTest {
         assertTrue(dir.isDirectory)
 
         val file = modelManager.getModelFile()
-        assertEquals("embeddinggemma_qat_int8.tflite", file.name)
+        assertEquals("embeddinggemma-300M_seq256_mixed-precision.tflite", file.name)
         assertFalse(modelManager.isModelAvailable())
     }
 
@@ -66,16 +67,28 @@ class ModelManagerTest {
     }
 
     @Test
-    fun testVerifyExistingModelHash() {
-        val modelFile = modelManager.getModelFile()
-        val content = "Model weights mock content".toByteArray(Charsets.UTF_8)
-        modelFile.writeBytes(content)
-
-        val expectedDigest = MessageDigest.getInstance("SHA-256").digest(content)
+    fun testImportModelFromInputStreamSuccess() = runBlocking {
+        val mockWeights = "Mock EmbeddingGemma Model Weights 300M".toByteArray(Charsets.UTF_8)
+        val expectedSha256 = MessageDigest.getInstance("SHA-256").digest(mockWeights)
             .joinToString("") { "%02x".format(it) }
 
+        val inputStream = ByteArrayInputStream(mockWeights)
+        val success = modelManager.importModelFromInputStream(inputStream, expectedSha256)
+
+        assertTrue(success)
         assertTrue(modelManager.isModelAvailable())
-        assertTrue(modelManager.verifyExistingModelHash(expectedDigest))
-        assertFalse(modelManager.verifyExistingModelHash("incorrect_hash_12345"))
+        assertTrue(modelManager.verifyExistingModelHash(expectedSha256))
+    }
+
+    @Test
+    fun testImportModelFromInputStreamSha256Mismatch() = runBlocking {
+        val mockWeights = "Corrupted Model File Data".toByteArray(Charsets.UTF_8)
+        val wrongSha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+
+        val inputStream = ByteArrayInputStream(mockWeights)
+        val success = modelManager.importModelFromInputStream(inputStream, wrongSha256)
+
+        assertFalse(success)
+        assertFalse(modelManager.isModelAvailable())
     }
 }

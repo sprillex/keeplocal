@@ -9,9 +9,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.CheckBox
+import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.Card
@@ -24,9 +27,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.randolph.keeplocal.data.local.entity.NoteEntity
+import com.randolph.keeplocal.data.local.entity.NoteType
 
 @Composable
 fun NoteCard(
@@ -90,7 +95,32 @@ fun NoteCard(
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
-            if (note.content.isNotBlank()) {
+            if (note.noteType == NoteType.CHECKLIST || note.noteType == NoteType.PROJECT_TASK) {
+                val checklistItems = ChecklistParser.parseContentToChecklist(note.content).take(5)
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    for (item in checklistItems) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(vertical = 2.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (item.isChecked) Icons.Filled.CheckBox else Icons.Filled.CheckBoxOutlineBlank,
+                                contentDescription = null,
+                                tint = if (item.isChecked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = item.text,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (item.isChecked) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                                textDecoration = if (item.isChecked) TextDecoration.LineThrough else TextDecoration.None,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            } else if (note.content.isNotBlank()) {
                 Text(
                     text = note.content,
                     style = MaterialTheme.typography.bodyMedium,

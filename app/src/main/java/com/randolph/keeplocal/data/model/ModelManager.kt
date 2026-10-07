@@ -19,11 +19,11 @@ class ModelManager(
 ) {
     companion object {
         const val MODEL_DIR = "models"
-        const val MODEL_FILENAME = "embeddinggemma_qat_int8.tflite"
+        const val MODEL_FILENAME = "embeddinggemma-300M_seq256_mixed-precision.tflite"
 
-        // Default configuration values
-        const val DEFAULT_MODEL_URL = "https://huggingface.co/google/embeddinggemma-qat-int8/resolve/main/embeddinggemma_qat_int8.tflite"
-        const val DEFAULT_EXPECTED_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        // Default configuration values for litert-community/embeddinggemma-300m
+        const val DEFAULT_MODEL_URL = "https://huggingface.co/litert-community/embeddinggemma-300m/resolve/main/embeddinggemma-300M_seq256_mixed-precision.tflite"
+        const val DEFAULT_EXPECTED_SHA256 = "37115ef7bff76cd37dd86abe503ff511b1032bf85fc624a85c49c84899e92bc5"
     }
 
     private val _downloadState = MutableStateFlow<DownloadState>(DownloadState.Idle)
@@ -111,6 +111,56 @@ class ModelManager(
                 tempFile.delete()
             }
             _downloadState.value = DownloadState.Error(e.localizedMessage ?: "Download failed")
+            false
+        }
+    }
+
+    suspend fun importModelFromInputStream(
+        inputStream: InputStream,
+        expectedHash: String = expectedSha256
+    ): Boolean = withContext(Dispatchers.IO) {
+        val targetFile = getModelFile()
+        val tempFile = File(getModelDirectory(), "$MODEL_FILENAME.tmp")
+
+        try {
+            _downloadState.value = DownloadState.Downloading(0, -1)
+
+            tempFile.outputStream().use { outputStream ->
+                val buffer = ByteArray(8192)
+                var bytesRead: Int
+                var totalRead = 0L
+                while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                    outputStream.write(buffer, 0, bytesRead)
+                    totalRead += bytesRead
+                    _downloadState.value = DownloadState.Downloading(totalRead, -1)
+                }
+                outputStream.flush()
+            }
+
+            _downloadState.value = DownloadState.Verifying
+            val calculatedHash = computeSha256(tempFile)
+
+            if (expectedHash.isNotEmpty() && !calculatedHash.equals(expectedHash, ignoreCase = true)) {
+                tempFile.delete()
+                _downloadState.value = DownloadState.Error("SHA-256 mismatch! Expected: $expectedHash, Found: $calculatedHash")
+                return@withContext false
+            }
+
+            if (targetFile.exists()) {
+                targetFile.delete()
+            }
+            if (!tempFile.renameTo(targetFile)) {
+                tempFile.copyTo(targetFile, overwrite = true)
+                tempFile.delete()
+            }
+
+            _downloadState.value = DownloadState.Success
+            true
+        } catch (e: Exception) {
+            if (tempFile.exists()) {
+                tempFile.delete()
+            }
+            _downloadState.value = DownloadState.Error(e.localizedMessage ?: "Import failed")
             false
         }
     }
