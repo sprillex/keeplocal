@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -44,9 +45,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.randolph.keeplocal.data.model.DownloadState
 import com.randolph.keeplocal.data.model.ModelManager
+import com.randolph.keeplocal.data.nas.NasConfig
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -58,11 +61,12 @@ fun ModelSettingsScreen(
     val context = LocalContext.current
     val downloadState by modelManager.downloadState.collectAsState()
     val scope = rememberCoroutineScope()
-    val modelFile = modelManager.getModelFile()
-    val isModelPresent = modelManager.isModelAvailable()
 
-    var customUrl by remember { mutableStateOf(modelManager.modelUrl) }
-    var customSha256 by remember { mutableStateOf(modelManager.expectedSha256) }
+    val modelFile = modelManager.getModelFile()
+    val tokenizerFile = modelManager.getTokenizeFile()
+    val isReady = modelManager.isModelAndTokenizerReady()
+
+    var nasConfig by remember { mutableStateOf(modelManager.nasCredentialManager.getNasConfig()) }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -70,7 +74,7 @@ fun ModelSettingsScreen(
         if (uri != null) {
             scope.launch {
                 context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                    modelManager.importModelFromInputStream(inputStream, customSha256)
+                    modelManager.importModelFromInputStream(inputStream)
                 }
             }
         }
@@ -111,7 +115,7 @@ fun ModelSettingsScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "litert-community / embeddinggemma-300m",
+                            text = "EmbeddingGemma 300M (LiteRT)",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -120,60 +124,122 @@ fun ModelSettingsScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
-                        text = "File: ${ModelManager.MODEL_FILENAME}",
+                        text = "Status: ${if (isReady) "Ready / Installed" else "Not Downloaded / Incomplete"}",
                         style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isReady) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Model: ${modelFile.name} (${if (modelFile.exists()) modelFile.length() / (1024 * 1024) else 0} MB)",
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "Status: ${if (isModelPresent) "Installed Locally" else "Not Downloaded"}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isModelPresent) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error
+                        text = "Tokenizer: ${tokenizerFile.name} (${if (tokenizerFile.exists()) tokenizerFile.length() / (1024 * 1024) else 0} MB)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "Destination: ${modelFile.parent}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Filled.Storage,
+                            contentDescription = "NAS Settings",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "SMB3 NAS Model Source Settings",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = nasConfig.hostIp,
+                        onValueChange = { nasConfig = nasConfig.copy(hostIp = it) },
+                        label = { Text("NAS IP / Hostname") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = nasConfig.shareName,
+                        onValueChange = { nasConfig = nasConfig.copy(shareName = it) },
+                        label = { Text("Share Name") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = nasConfig.subfolderPath,
+                        onValueChange = { nasConfig = nasConfig.copy(subfolderPath = it) },
+                        label = { Text("Subfolder Path (Optional)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = nasConfig.username,
+                        onValueChange = { nasConfig = nasConfig.copy(username = it) },
+                        label = { Text("Username") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = nasConfig.password,
+                        onValueChange = { nasConfig = nasConfig.copy(password = it) },
+                        label = { Text("Password") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation()
                     )
 
-                    if (isModelPresent) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Size: ${modelFile.length() / (1024 * 1024)} MB",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "Path: ${modelFile.absolutePath}",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Button(
+                        onClick = {
+                            modelManager.nasCredentialManager.saveNasConfig(nasConfig)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Save Credentials")
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            OutlinedTextField(
-                value = customUrl,
-                onValueChange = { customUrl = it },
-                label = { Text("Model Asset Download URL") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            OutlinedTextField(
-                value = customSha256,
-                onValueChange = { customSha256 = it },
-                label = { Text("Expected SHA-256 Hash") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
             when (val state = downloadState) {
                 is DownloadState.Downloading -> {
                     Text(
-                        text = "Downloading / Importing model weights...",
+                        text = "Downloading model & tokenizer via SMB3...",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -189,7 +255,7 @@ fun ModelSettingsScreen(
                 }
                 is DownloadState.Verifying -> {
                     Text(
-                        text = "Verifying SHA-256 hash checksum...",
+                        text = "Verifying file size and SHA-256 checksums...",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -205,7 +271,7 @@ fun ModelSettingsScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Model verified and imported successfully!",
+                            text = "Model and tokenizer ready and verified!",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.tertiary
                         )
@@ -226,8 +292,9 @@ fun ModelSettingsScreen(
             Row(modifier = Modifier.fillMaxWidth()) {
                 Button(
                     onClick = {
+                        modelManager.nasCredentialManager.saveNasConfig(nasConfig)
                         scope.launch {
-                            modelManager.downloadAndVerifyModel(customUrl, customSha256)
+                            modelManager.downloadAndVerifyFromSmbNas(nasConfig)
                         }
                     },
                     modifier = Modifier.weight(1f),
@@ -235,7 +302,7 @@ fun ModelSettingsScreen(
                 ) {
                     Icon(imageVector = Icons.Filled.Download, contentDescription = "Download")
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(if (isModelPresent) "Re-download" else "Download")
+                    Text(if (isReady) "Re-download Weights" else "Download Model Weights")
                 }
 
                 Spacer(modifier = Modifier.width(8.dp))

@@ -13,6 +13,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.io.RandomAccessFile
 import java.security.MessageDigest
 
 @RunWith(RobolectricTestRunner::class)
@@ -34,36 +35,42 @@ class ModelManagerTest {
         if (modelFile.exists()) {
             modelFile.delete()
         }
-        val tmpFile = File(modelManager.getModelDirectory(), "${ModelManager.MODEL_FILENAME}.tmp")
-        if (tmpFile.exists()) {
-            tmpFile.delete()
+        val tokenizerFile = modelManager.getTokenizeFile()
+        if (tokenizerFile.exists()) {
+            tokenizerFile.delete()
         }
     }
 
     @Test
-    fun testModelFileLocationAndDirectoryCreation() {
+    fun testModelAndTokenizerFileDestinations() {
         val dir = modelManager.getModelDirectory()
         assertTrue(dir.exists())
-        assertTrue(dir.isDirectory)
 
-        val file = modelManager.getModelFile()
-        assertEquals("embeddinggemma-300M_seq256_mixed-precision.tflite", file.name)
-        assertFalse(modelManager.isModelAvailable())
+        val modelFile = modelManager.getModelFile()
+        assertEquals("embeddinggemma_qat_int8.tflite", modelFile.name)
+        assertEquals(context.filesDir.resolve("models/embeddinggemma_qat_int8.tflite").absolutePath, modelFile.absolutePath)
+
+        val tokenizerFile = modelManager.getTokenizeFile()
+        assertEquals("sentencepiece.model", tokenizerFile.name)
+        assertEquals(context.filesDir.resolve("models/sentencepiece.model").absolutePath, tokenizerFile.absolutePath)
+
+        assertFalse(modelManager.isModelAndTokenizerReady())
     }
 
     @Test
-    fun testSha256Computation() {
-        val testFile = File(modelManager.getModelDirectory(), "test_data.bin")
-        val content = "KeepLocal Privacy First Notes".toByteArray(Charsets.UTF_8)
-        testFile.writeBytes(content)
+    fun testVerificationIntegrityChecks() {
+        val modelFile = modelManager.getModelFile()
+        modelFile.writeBytes("Mock Model Data".toByteArray(Charsets.UTF_8))
+        RandomAccessFile(modelFile, "rw").use { it.setLength(ModelManager.MODEL_EXPECTED_SIZE) }
 
-        val expectedDigest = MessageDigest.getInstance("SHA-256").digest(content)
-            .joinToString("") { "%02x".format(it) }
+        assertTrue(modelManager.verifyModelFile(modelFile))
 
-        val calculatedDigest = modelManager.computeSha256(testFile)
-        assertEquals(expectedDigest, calculatedDigest)
+        val tokenizerFile = modelManager.getTokenizeFile()
+        tokenizerFile.writeBytes("Mock Tokenizer Data".toByteArray(Charsets.UTF_8))
+        RandomAccessFile(tokenizerFile, "rw").use { it.setLength(ModelManager.TOKENIZER_EXPECTED_SIZE) }
 
-        testFile.delete()
+        assertTrue(modelManager.verifyTokenizerFile(tokenizerFile))
+        assertTrue(modelManager.isModelAndTokenizerReady())
     }
 
     @Test
@@ -76,19 +83,6 @@ class ModelManagerTest {
         val success = modelManager.importModelFromInputStream(inputStream, expectedSha256)
 
         assertTrue(success)
-        assertTrue(modelManager.isModelAvailable())
-        assertTrue(modelManager.verifyExistingModelHash(expectedSha256))
-    }
-
-    @Test
-    fun testImportModelFromInputStreamSha256Mismatch() = runBlocking {
-        val mockWeights = "Corrupted Model File Data".toByteArray(Charsets.UTF_8)
-        val wrongSha256 = "0000000000000000000000000000000000000000000000000000000000000000"
-
-        val inputStream = ByteArrayInputStream(mockWeights)
-        val success = modelManager.importModelFromInputStream(inputStream, wrongSha256)
-
-        assertFalse(success)
-        assertFalse(modelManager.isModelAvailable())
+        assertTrue(modelManager.getModelFile().exists())
     }
 }
