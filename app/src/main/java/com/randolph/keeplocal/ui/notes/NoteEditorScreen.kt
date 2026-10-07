@@ -187,7 +187,7 @@ fun NoteEditorScreen(
                             onClick = {
                                 showMenu = false
                                 if (note != null) onDelete(note)
-                                saveAndExit()
+                                onBackAndSave(0, "", "", NoteType.TEXT, false, null)
                             },
                             leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) }
                         )
@@ -196,7 +196,7 @@ fun NoteEditorScreen(
                             onClick = {
                                 showMenu = false
                                 if (note != null) onArchive(note)
-                                saveAndExit()
+                                onBackAndSave(0, "", "", NoteType.TEXT, false, null)
                             }
                         )
                         DropdownMenuItem(
