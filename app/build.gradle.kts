@@ -72,6 +72,10 @@ dependencies {
     // Coroutines
     implementation(libs.kotlinx.coroutines.core)
 
+    // TensorFlow Lite / LiteRT
+    implementation(libs.tensorflow.lite)
+    implementation(libs.tensorflow.lite.support)
+
     // Testing
     testImplementation(libs.junit)
     testImplementation(libs.androidx.test.core.ktx)
