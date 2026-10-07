@@ -50,6 +50,19 @@ android {
             isIncludeAndroidResources = true
         }
     }
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "META-INF/DEPENDENCIES"
+            excludes += "META-INF/LICENSE"
+            excludes += "META-INF/LICENSE.txt"
+            excludes += "META-INF/license.txt"
+            excludes += "META-INF/NOTICE"
+            excludes += "META-INF/NOTICE.txt"
+            excludes += "META-INF/notice.txt"
+            excludes += "META-INF/ASL2.0"
+        }
+    }
 }
 
 dependencies {
@@ -63,6 +76,7 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation(libs.androidx.material.icons.extended)
+    implementation(libs.androidx.security.crypto)
 
     // Room
     implementation(libs.room.runtime)
@@ -75,6 +89,9 @@ dependencies {
     // TensorFlow Lite / LiteRT
     implementation(libs.tensorflow.lite)
     implementation(libs.tensorflow.lite.support)
+
+    // SMB NAS Network Client
+    implementation(libs.smbj)
 
     // Testing
     testImplementation(libs.junit)
