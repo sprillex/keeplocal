@@ -20,6 +20,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -55,6 +56,7 @@ fun NasBackupSettingsScreen(
     val scope = rememberCoroutineScope()
     var config by remember { mutableStateOf(nasCredentialManager.getNasConfig()) }
     var syncStatusMessage by remember { mutableStateOf<String?>(null) }
+    var isError by remember { mutableStateOf(false) }
     var isProcessing by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -118,6 +120,15 @@ fun NasBackupSettingsScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     OutlinedTextField(
+                        value = config.subfolderPath,
+                        onValueChange = { config = config.copy(subfolderPath = it) },
+                        label = { Text("Subfolder Path (Optional)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
                         value = config.username,
                         onValueChange = { config = config.copy(username = it) },
                         label = { Text("Username") },
@@ -139,23 +150,44 @@ fun NasBackupSettingsScreen(
 
                     Button(
                         onClick = {
-                            nasCredentialManager.saveNasConfig(config)
-                            syncStatusMessage = "NAS configuration saved securely."
+                            isProcessing = true
+                            syncStatusMessage = "Testing SMB NAS connection..."
+                            scope.launch {
+                                val testResult = smbBackupManager.testConnection(config)
+                                isProcessing = false
+                                when (testResult) {
+                                    is SyncResult.Success -> {
+                                        nasCredentialManager.saveNasConfig(config)
+                                        isError = false
+                                        syncStatusMessage = "Credentials saved & SMB NAS connection verified successfully!"
+                                    }
+                                    is SyncResult.Error -> {
+                                        isError = true
+                                        syncStatusMessage = "Connection Test Failed: ${testResult.message}"
+                                    }
+                                }
+                            }
                         },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isProcessing && config.isValid
                     ) {
-                        Text("Save Credentials")
+                        Text("Save & Test Credentials")
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            if (isProcessing) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
             if (syncStatusMessage != null) {
                 Text(
                     text = syncStatusMessage!!,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary
+                    color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                 )
                 Spacer(modifier = Modifier.height(12.dp))
             }
@@ -168,9 +200,15 @@ fun NasBackupSettingsScreen(
                         scope.launch {
                             val result = smbBackupManager.performBackup(context.cacheDir)
                             isProcessing = false
-                            syncStatusMessage = when (result) {
-                                is SyncResult.Success -> "Backup completed successfully!"
-                                is SyncResult.Error -> "Backup failed: ${result.message}"
+                            when (result) {
+                                is SyncResult.Success -> {
+                                    isError = false
+                                    syncStatusMessage = "Backup completed successfully!"
+                                }
+                                is SyncResult.Error -> {
+                                    isError = true
+                                    syncStatusMessage = "Backup Failed: ${result.message}"
+                                }
                             }
                         }
                     },
@@ -191,9 +229,15 @@ fun NasBackupSettingsScreen(
                         scope.launch {
                             val result = smbBackupManager.restoreBackup(context.cacheDir)
                             isProcessing = false
-                            syncStatusMessage = when (result) {
-                                is SyncResult.Success -> "Restore completed! Vector index re-embedding triggered."
-                                is SyncResult.Error -> "Restore failed: ${result.message}"
+                            when (result) {
+                                is SyncResult.Success -> {
+                                    isError = false
+                                    syncStatusMessage = "Restore completed! Vector index re-embedding triggered."
+                                }
+                                is SyncResult.Error -> {
+                                    isError = true
+                                    syncStatusMessage = "Restore Failed: ${result.message}"
+                                }
                             }
                         }
                     },
