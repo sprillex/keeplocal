@@ -123,7 +123,17 @@ class MainActivity : ComponentActivity() {
                                 viewModel.softDeleteNote(note)
                                 currentScreen = Screen.MAIN_NOTES
                             },
-                            onArchive = { note -> viewModel.archiveNote(note) },
+                            onArchive = { note ->
+                                viewModel.saveAndArchiveNote(
+                                    id = note.id,
+                                    title = note.title,
+                                    content = note.content,
+                                    noteType = note.noteType,
+                                    isPinned = note.isPinned,
+                                    colorHex = note.colorHex
+                                )
+                                currentScreen = Screen.MAIN_NOTES
+                            },
                             onQueryRelatedContext = { title, content ->
                                 viewModel.loadRelatedContextForDraft(title, content)
                             }
@@ -153,12 +163,11 @@ fun MainNotesScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    val displayedNotes = if (uiState.isTrashView) {
-        uiState.trashedNotes
-    } else if (uiState.searchQuery.isNotBlank()) {
-        uiState.searchResults.map { it.note }
-    } else {
-        uiState.notes
+    val displayedNotes = when {
+        uiState.isTrashView -> uiState.trashedNotes
+        uiState.isArchiveView -> uiState.archivedNotes
+        uiState.searchQuery.isNotBlank() -> uiState.searchResults.map { it.note }
+        else -> uiState.notes
     }
 
     Scaffold(
@@ -192,8 +201,11 @@ fun MainNotesScreen(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (uiState.isTrashView) {
-                    IconButton(onClick = { viewModel.setTrashView(false) }) {
+                if (uiState.isTrashView || uiState.isArchiveView) {
+                    IconButton(onClick = {
+                        viewModel.setTrashView(false)
+                        viewModel.setArchiveView(false)
+                    }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back to Main Notes",
@@ -201,7 +213,7 @@ fun MainNotesScreen(
                         )
                     }
                     Text(
-                        text = "Trash",
+                        text = if (uiState.isTrashView) "Trash" else "Archive",
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onBackground,
@@ -215,6 +227,14 @@ fun MainNotesScreen(
                         color = MaterialTheme.colorScheme.onBackground,
                         modifier = Modifier.weight(1f)
                     )
+
+                    IconButton(onClick = { viewModel.setArchiveView(true) }) {
+                        Icon(
+                            imageVector = Icons.Outlined.Archive,
+                            contentDescription = "Archive",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
 
                     IconButton(onClick = { viewModel.setTrashView(true) }) {
                         Icon(
@@ -244,7 +264,7 @@ fun MainNotesScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            if (!uiState.isTrashView) {
+            if (!uiState.isTrashView && !uiState.isArchiveView) {
                 KeepLocalSearchBar(
                     query = uiState.searchQuery,
                     onQueryChange = { viewModel.setSearchQuery(it) },
@@ -266,6 +286,7 @@ fun MainNotesScreen(
                 ) {
                     val emptyMessage = when {
                         uiState.isTrashView -> "Trash is empty."
+                        uiState.isArchiveView -> "Archive is empty."
                         uiState.searchQuery.isNotBlank() -> "No matching notes found."
                         else -> "No notes yet. Tap + to add one!"
                     }
@@ -279,6 +300,7 @@ fun MainNotesScreen(
                 NoteList(
                     notes = displayedNotes,
                     layoutType = uiState.layoutType,
+                    isArchiveView = uiState.isArchiveView,
                     onNoteClick = { note ->
                         if (uiState.isTrashView) {
                             viewModel.openNoteDialog(note)
