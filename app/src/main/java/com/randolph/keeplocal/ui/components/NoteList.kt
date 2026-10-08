@@ -31,7 +31,7 @@ fun NoteList(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalItemSpacing = 12.dp
         ) {
-            items(notes, key = { it.id }) { note ->
+            items(notes, key = { "${it.id}_${it.updatedAt}" }) { note ->
                 NoteCard(
                     note = note,
                     onClick = { onNoteClick(note) },
@@ -45,7 +45,7 @@ fun NoteList(
             contentPadding = contentPadding,
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(notes, key = { it.id }) { note ->
+            items(notes, key = { "${it.id}_${it.updatedAt}" }) { note ->
                 NoteCard(
                     note = note,
                     onClick = { onNoteClick(note) },

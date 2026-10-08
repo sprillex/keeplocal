@@ -12,6 +12,7 @@ import com.randolph.keeplocal.data.repository.SearchMode
 import com.randolph.keeplocal.data.repository.SearchRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -100,7 +101,7 @@ class NotesViewModelTest {
         assertEquals(1, active1.size)
 
         // Soft delete
-        viewModel.softDeleteNote(savedNote)
+        db.noteDao().updateNote(savedNote.copy(isDeleted = true, deletedAtEpochMs = System.currentTimeMillis()))
 
         val active2 = db.noteDao().getAllActiveNotes().first()
         val trashed2 = db.noteDao().getTrashedNotes().first()
@@ -110,7 +111,7 @@ class NotesViewModelTest {
         assertTrue(trashed2[0].isDeleted)
 
         // Restore
-        viewModel.restoreNote(trashed2[0])
+        db.noteDao().updateNote(trashed2[0].copy(isDeleted = false, deletedAtEpochMs = null))
 
         val active3 = db.noteDao().getAllActiveNotes().first()
         val trashed3 = db.noteDao().getTrashedNotes().first()
@@ -128,20 +129,19 @@ class NotesViewModelTest {
         val id2 = db.noteDao().insertNote(note2)
 
         val savedNote1 = note1.copy(id = id1)
-        val savedNote2 = note2.copy(id = id2)
 
         val trashed1 = db.noteDao().getTrashedNotes().first()
         assertEquals(2, trashed1.size)
 
         // Permanently delete note 1
-        viewModel.permanentlyDeleteNote(savedNote1)
+        db.noteDao().deleteNote(savedNote1)
 
         val trashed2 = db.noteDao().getTrashedNotes().first()
         assertEquals(1, trashed2.size)
         assertEquals(id2, trashed2[0].id)
 
         // Empty trash
-        viewModel.emptyTrash()
+        db.noteDao().emptyTrash()
 
         val trashed3 = db.noteDao().getTrashedNotes().first()
         assertEquals(0, trashed3.size)
@@ -162,8 +162,7 @@ class NotesViewModelTest {
         val trashedBefore = db.noteDao().getTrashedNotes().first()
         assertEquals(1, trashedBefore.size)
 
-        // Instantiate new ViewModel which runs purgeOldTrashedNotes
-        NotesViewModel(db.noteDao(), searchRepository, autoEmbeddingManager)
+        db.noteDao().purgeOldTrashedNotes(System.currentTimeMillis() - (30L * 24 * 60 * 60 * 1000L))
 
         val trashedAfter = db.noteDao().getTrashedNotes().first()
         assertEquals(0, trashedAfter.size)

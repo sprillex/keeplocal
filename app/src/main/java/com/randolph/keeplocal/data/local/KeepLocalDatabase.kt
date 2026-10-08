@@ -32,6 +32,25 @@ abstract class KeepLocalDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: KeepLocalDatabase? = null
 
+        private fun createTriggers(db: SupportSQLiteDatabase) {
+            db.execSQL("""
+                CREATE TRIGGER IF NOT EXISTS notes_fts_ai AFTER INSERT ON notes BEGIN
+                    INSERT INTO notes_fts(rowid, title, content) VALUES (new.id, new.title, new.content);
+                END;
+            """.trimIndent())
+            db.execSQL("""
+                CREATE TRIGGER IF NOT EXISTS notes_fts_ad AFTER DELETE ON notes BEGIN
+                    INSERT INTO notes_fts(notes_fts, rowid, title, content) VALUES('delete', old.id, old.title, old.content);
+                END;
+            """.trimIndent())
+            db.execSQL("""
+                CREATE TRIGGER IF NOT EXISTS notes_fts_au AFTER UPDATE ON notes BEGIN
+                    INSERT INTO notes_fts(notes_fts, rowid, title, content) VALUES('delete', old.id, old.title, old.content);
+                    INSERT INTO notes_fts(rowid, title, content) VALUES (new.id, new.title, new.content);
+                END;
+            """.trimIndent())
+        }
+
         fun getDatabase(context: Context): KeepLocalDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -43,22 +62,12 @@ abstract class KeepLocalDatabase : RoomDatabase() {
                 .addCallback(object : RoomDatabase.Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
-                        db.execSQL("""
-                            CREATE TRIGGER IF NOT EXISTS notes_fts_ai AFTER INSERT ON notes BEGIN
-                                INSERT INTO notes_fts(rowid, title, content) VALUES (new.id, new.title, new.content);
-                            END;
-                        """.trimIndent())
-                        db.execSQL("""
-                            CREATE TRIGGER IF NOT EXISTS notes_fts_ad AFTER DELETE ON notes BEGIN
-                                INSERT INTO notes_fts(notes_fts, rowid, title, content) VALUES('delete', old.id, old.title, old.content);
-                            END;
-                        """.trimIndent())
-                        db.execSQL("""
-                            CREATE TRIGGER IF NOT EXISTS notes_fts_au AFTER UPDATE ON notes BEGIN
-                                INSERT INTO notes_fts(notes_fts, rowid, title, content) VALUES('delete', old.id, old.title, old.content);
-                                INSERT INTO notes_fts(rowid, title, content) VALUES (new.id, new.title, new.content);
-                            END;
-                        """.trimIndent())
+                        createTriggers(db)
+                    }
+
+                    override fun onOpen(db: SupportSQLiteDatabase) {
+                        super.onOpen(db)
+                        createTriggers(db)
                     }
                 })
                 .build()
