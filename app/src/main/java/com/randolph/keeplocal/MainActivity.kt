@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,9 +14,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -23,6 +32,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -109,7 +119,10 @@ class MainActivity : ComponentActivity() {
                                 }
                                 currentScreen = Screen.MAIN_NOTES
                             },
-                            onDelete = { note -> viewModel.deleteNote(note) },
+                            onDelete = { note ->
+                                viewModel.softDeleteNote(note)
+                                currentScreen = Screen.MAIN_NOTES
+                            },
                             onArchive = { note -> viewModel.archiveNote(note) },
                             onQueryRelatedContext = { title, content ->
                                 viewModel.loadRelatedContextForDraft(title, content)
@@ -140,7 +153,9 @@ fun MainNotesScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    val displayedNotes = if (uiState.searchQuery.isNotBlank()) {
+    val displayedNotes = if (uiState.isTrashView) {
+        uiState.trashedNotes
+    } else if (uiState.searchQuery.isNotBlank()) {
         uiState.searchResults.map { it.note }
     } else {
         uiState.notes
@@ -148,12 +163,22 @@ fun MainNotesScreen(
 
     Scaffold(
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { onOpenEditor(null) },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            ) {
-                Icon(Icons.Filled.Add, contentDescription = "New Note")
+            if (uiState.isTrashView) {
+                FloatingActionButton(
+                    onClick = { viewModel.promptEmptyTrash() },
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError
+                ) {
+                    Icon(Icons.Filled.DeleteForever, contentDescription = "Empty Trash")
+                }
+            } else {
+                FloatingActionButton(
+                    onClick = { onOpenEditor(null) },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = "New Note")
+                }
             }
         }
     ) { innerPadding ->
@@ -167,43 +192,70 @@ fun MainNotesScreen(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "KeepLocal",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.weight(1f)
-                )
-
-                IconButton(onClick = onNavigateToModelSettings) {
-                    Icon(
-                        imageVector = Icons.Filled.Memory,
-                        contentDescription = "AI Model Settings",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                if (uiState.isTrashView) {
+                    IconButton(onClick = { viewModel.setTrashView(false) }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back to Main Notes",
+                            tint = MaterialTheme.colorScheme.onBackground
+                        )
+                    }
+                    Text(
+                        text = "Trash",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.weight(1f)
                     )
-                }
-
-                IconButton(onClick = onNavigateToNasSettings) {
-                    Icon(
-                        imageVector = Icons.Filled.Storage,
-                        contentDescription = "NAS Backup Settings",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    Text(
+                        text = "KeepLocal",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.weight(1f)
                     )
+
+                    IconButton(onClick = { viewModel.setTrashView(true) }) {
+                        Icon(
+                            imageVector = Icons.Outlined.Delete,
+                            contentDescription = "Trash",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    IconButton(onClick = { onNavigateToModelSettings() }) {
+                        Icon(
+                            imageVector = Icons.Filled.Memory,
+                            contentDescription = "AI Model Settings",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    IconButton(onClick = { onNavigateToNasSettings() }) {
+                        Icon(
+                            imageVector = Icons.Filled.Storage,
+                            contentDescription = "NAS Backup Settings",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            KeepLocalSearchBar(
-                query = uiState.searchQuery,
-                onQueryChange = { viewModel.setSearchQuery(it) },
-                searchMode = uiState.searchMode,
-                onSearchModeChange = { viewModel.setSearchMode(it) },
-                layoutType = uiState.layoutType,
-                onToggleLayout = { viewModel.toggleLayoutType() }
-            )
+            if (!uiState.isTrashView) {
+                KeepLocalSearchBar(
+                    query = uiState.searchQuery,
+                    onQueryChange = { viewModel.setSearchQuery(it) },
+                    searchMode = uiState.searchMode,
+                    onSearchModeChange = { viewModel.setSearchMode(it) },
+                    layoutType = uiState.layoutType,
+                    onToggleLayout = { viewModel.toggleLayoutType() }
+                )
 
-            Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.dp))
+            }
 
             if (displayedNotes.isEmpty()) {
                 Box(
@@ -212,8 +264,13 @@ fun MainNotesScreen(
                         .weight(1f),
                     contentAlignment = Alignment.Center
                 ) {
+                    val emptyMessage = when {
+                        uiState.isTrashView -> "Trash is empty."
+                        uiState.searchQuery.isNotBlank() -> "No matching notes found."
+                        else -> "No notes yet. Tap + to add one!"
+                    }
                     Text(
-                        text = if (uiState.searchQuery.isNotBlank()) "No matching notes found." else "No notes yet. Tap + to add one!",
+                        text = emptyMessage,
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -222,12 +279,198 @@ fun MainNotesScreen(
                 NoteList(
                     notes = displayedNotes,
                     layoutType = uiState.layoutType,
-                    onNoteClick = { note -> onOpenEditor(note) },
-                    onPinClick = { note -> viewModel.togglePinNote(note) },
-                    onArchiveClick = { note -> viewModel.archiveNote(note) },
+                    onNoteClick = { note ->
+                        if (uiState.isTrashView) {
+                            viewModel.openNoteDialog(note)
+                        } else {
+                            onOpenEditor(note)
+                        }
+                    },
+                    onNoteLongClick = { note ->
+                        viewModel.openNoteDialog(note)
+                    },
                     modifier = Modifier.weight(1f)
                 )
             }
         }
+    }
+
+    // Dialog for Long-Pressed Note Options
+    uiState.selectedNoteForDialog?.let { selectedNote ->
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissNoteDialog() },
+            title = {
+                Text(text = selectedNote.title.ifBlank { "Untitled Note" })
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (!uiState.isTrashView) {
+                        TextButton(
+                            onClick = {
+                                viewModel.togglePinNote(selectedNote)
+                                viewModel.dismissNoteDialog()
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Start,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (selectedNote.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                                    contentDescription = null,
+                                    modifier = Modifier.padding(end = 12.dp)
+                                )
+                                Text(if (selectedNote.isPinned) "Unpin Note" else "Pin Note")
+                            }
+                        }
+
+                        TextButton(
+                            onClick = {
+                                viewModel.archiveNote(selectedNote)
+                                viewModel.dismissNoteDialog()
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Start,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Archive,
+                                    contentDescription = null,
+                                    modifier = Modifier.padding(end = 12.dp)
+                                )
+                                Text(if (selectedNote.isArchived) "Unarchive Note" else "Archive Note")
+                            }
+                        }
+
+                        TextButton(
+                            onClick = {
+                                viewModel.softDeleteNote(selectedNote)
+                                viewModel.dismissNoteDialog()
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Start,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Delete,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.padding(end = 12.dp)
+                                )
+                                Text("Delete (Move to Trash)", color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    } else {
+                        TextButton(
+                            onClick = {
+                                viewModel.restoreNote(selectedNote)
+                                viewModel.dismissNoteDialog()
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Start,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Restore,
+                                    contentDescription = null,
+                                    modifier = Modifier.padding(end = 12.dp)
+                                )
+                                Text("Restore Note")
+                            }
+                        }
+
+                        TextButton(
+                            onClick = {
+                                viewModel.dismissNoteDialog()
+                                viewModel.promptPermanentDelete(selectedNote)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Start,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.DeleteForever,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.padding(end = 12.dp)
+                                )
+                                Text("Delete permanently", color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissNoteDialog() }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Confirmation Dialog for Permanent Delete
+    if (uiState.showPermanentDeleteConfirmDialog && uiState.noteToPermanentlyDelete != null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissPermanentDeletePrompt() },
+            title = { Text("Delete permanently?") },
+            text = { Text("This note will be permanently deleted and cannot be recovered.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        uiState.noteToPermanentlyDelete?.let { viewModel.permanentlyDeleteNote(it) }
+                        viewModel.dismissPermanentDeletePrompt()
+                    }
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissPermanentDeletePrompt() }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Confirmation Dialog for Empty Trash
+    if (uiState.showEmptyTrashConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissEmptyTrashPrompt() },
+            title = { Text("Empty Trash?") },
+            text = { Text("All notes in the trash will be permanently deleted.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.emptyTrash()
+                        viewModel.dismissEmptyTrashPrompt()
+                    }
+                ) {
+                    Text("Empty Trash", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissEmptyTrashPrompt() }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

@@ -35,8 +35,30 @@ class NotesViewModel(
 
     private fun loadNotes() {
         viewModelScope.launch {
-            noteDao.getAllActiveNotes().collectLatest { activeNotes ->
-                _uiState.update { it.copy(notes = activeNotes) }
+            try {
+                val thirtyDaysMs = 30L * 24 * 60 * 60 * 1000L
+                val cutoff = System.currentTimeMillis() - thirtyDaysMs
+                noteDao.purgeOldTrashedNotes(cutoff)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        viewModelScope.launch {
+            try {
+                noteDao.getAllActiveNotes().collectLatest { activeNotes ->
+                    _uiState.update { it.copy(notes = activeNotes) }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        viewModelScope.launch {
+            try {
+                noteDao.getTrashedNotes().collectLatest { trash ->
+                    _uiState.update { it.copy(trashedNotes = trash) }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
     }
@@ -46,6 +68,10 @@ class NotesViewModel(
             val newLayout = if (it.layoutType == LayoutType.GRID) LayoutType.LIST else LayoutType.GRID
             it.copy(layoutType = newLayout)
         }
+    }
+
+    fun setTrashView(isTrash: Boolean) {
+        _uiState.update { it.copy(isTrashView = isTrash, searchQuery = "", searchResults = emptyList()) }
     }
 
     fun setSearchQuery(query: String, debounceMs: Long = 300L): Job {
@@ -76,8 +102,21 @@ class NotesViewModel(
         }
 
         _uiState.update { it.copy(isSearching = true) }
-        val results = searchRepository.searchNotes(query, mode)
-        _uiState.update { it.copy(searchResults = results, isSearching = false) }
+        try {
+            val results = searchRepository.searchNotes(query, mode)
+            _uiState.update { it.copy(searchResults = results, isSearching = false) }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            _uiState.update { it.copy(isSearching = false) }
+        }
+    }
+
+    private fun refreshSearchIfSearching() {
+        if (_uiState.value.searchQuery.isNotBlank()) {
+            viewModelScope.launch {
+                executeSearch(_uiState.value.searchQuery, _uiState.value.searchMode)
+            }
+        }
     }
 
     fun saveNote(
@@ -89,41 +128,142 @@ class NotesViewModel(
         colorHex: String? = null
     ) {
         viewModelScope.launch {
-            val note = NoteEntity(
-                id = id,
-                title = title,
-                content = content,
-                noteType = noteType,
-                isPinned = isPinned,
-                colorHex = colorHex,
-                updatedAt = System.currentTimeMillis()
-            )
-            val savedId = noteDao.insertNote(note)
-            val updatedNote = note.copy(id = savedId)
+            try {
+                val existing = if (id != 0L) noteDao.getNoteById(id) else null
+                val note = NoteEntity(
+                    id = id,
+                    title = title,
+                    content = content,
+                    noteType = noteType,
+                    isPinned = isPinned,
+                    isArchived = existing?.isArchived ?: false,
+                    isDeleted = existing?.isDeleted ?: false,
+                    deletedAtEpochMs = existing?.deletedAtEpochMs,
+                    colorHex = colorHex,
+                    updatedAt = System.currentTimeMillis()
+                )
+                val savedId = noteDao.insertNote(note)
+                val updatedNote = note.copy(id = savedId)
 
-            // Auto-embed note in background
-            autoEmbeddingManager.embedAndSaveNote(updatedNote)
+                // Auto-embed note in background
+                autoEmbeddingManager.embedAndSaveNote(updatedNote)
+                refreshSearchIfSearching()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 
     fun togglePinNote(note: NoteEntity) {
         viewModelScope.launch {
-            val updated = note.copy(isPinned = !note.isPinned, updatedAt = System.currentTimeMillis())
-            noteDao.updateNote(updated)
+            try {
+                val updated = note.copy(isPinned = !note.isPinned, updatedAt = System.currentTimeMillis())
+                noteDao.updateNote(updated)
+                refreshSearchIfSearching()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 
     fun archiveNote(note: NoteEntity) {
         viewModelScope.launch {
-            val updated = note.copy(isArchived = true, updatedAt = System.currentTimeMillis())
-            noteDao.updateNote(updated)
+            try {
+                val updated = note.copy(isArchived = !note.isArchived, updatedAt = System.currentTimeMillis())
+                noteDao.updateNote(updated)
+                refreshSearchIfSearching()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 
-    fun deleteNote(note: NoteEntity) {
+    fun softDeleteNote(note: NoteEntity) {
         viewModelScope.launch {
-            noteDao.deleteNote(note)
+            try {
+                val updated = note.copy(
+                    isDeleted = true,
+                    deletedAtEpochMs = System.currentTimeMillis(),
+                    updatedAt = System.currentTimeMillis()
+                )
+                noteDao.updateNote(updated)
+                refreshSearchIfSearching()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
+    }
+
+    fun restoreNote(note: NoteEntity) {
+        viewModelScope.launch {
+            try {
+                val updated = note.copy(
+                    isDeleted = false,
+                    deletedAtEpochMs = null,
+                    updatedAt = System.currentTimeMillis()
+                )
+                noteDao.updateNote(updated)
+                refreshSearchIfSearching()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun permanentlyDeleteNote(note: NoteEntity) {
+        viewModelScope.launch {
+            try {
+                noteDao.deleteNote(note)
+                refreshSearchIfSearching()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun emptyTrash() {
+        viewModelScope.launch {
+            try {
+                noteDao.emptyTrash()
+                refreshSearchIfSearching()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun openNoteDialog(note: NoteEntity) {
+        _uiState.update { it.copy(selectedNoteForDialog = note) }
+    }
+
+    fun dismissNoteDialog() {
+        _uiState.update { it.copy(selectedNoteForDialog = null) }
+    }
+
+    fun promptPermanentDelete(note: NoteEntity) {
+        _uiState.update {
+            it.copy(
+                noteToPermanentlyDelete = note,
+                showPermanentDeleteConfirmDialog = true
+            )
+        }
+    }
+
+    fun dismissPermanentDeletePrompt() {
+        _uiState.update {
+            it.copy(
+                noteToPermanentlyDelete = null,
+                showPermanentDeleteConfirmDialog = false
+            )
+        }
+    }
+
+    fun promptEmptyTrash() {
+        _uiState.update { it.copy(showEmptyTrashConfirmDialog = true) }
+    }
+
+    fun dismissEmptyTrashPrompt() {
+        _uiState.update { it.copy(showEmptyTrashConfirmDialog = false) }
     }
 
     fun selectNoteForEditing(note: NoteEntity?) {
@@ -145,11 +285,15 @@ class NotesViewModel(
 
         relatedContextJob = viewModelScope.launch {
             delay(200) // Debounce related context query
-            val currentId = _uiState.value.selectedNoteForEditing?.id ?: 0L
-            val matches = searchRepository.executeSemanticSearch(queryText)
-                .filter { it.note.id != currentId }
-                .take(3)
-            _uiState.update { it.copy(relatedContextNotes = matches) }
+            try {
+                val currentId = _uiState.value.selectedNoteForEditing?.id ?: 0L
+                val matches = searchRepository.executeSemanticSearch(queryText)
+                    .filter { it.note.id != currentId }
+                    .take(3)
+                _uiState.update { it.copy(relatedContextNotes = matches) }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 }
