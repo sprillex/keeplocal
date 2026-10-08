@@ -61,6 +61,30 @@ class KeepLocalDatabaseTest {
     }
 
     @Test
+    fun testUpdateNote() = runBlocking {
+        val note = NoteEntity(
+            title = "Original Title",
+            content = "Original Content",
+            noteType = NoteType.TEXT
+        )
+        val noteId = noteDao.insertNote(note)
+        val savedNote = noteDao.getNoteById(noteId)!!
+
+        val updatedNote = savedNote.copy(
+            title = "Updated Title",
+            isPinned = true,
+            isArchived = true
+        )
+        noteDao.updateNote(updatedNote)
+
+        val retrieved = noteDao.getNoteById(noteId)
+        assertNotNull(retrieved)
+        assertEquals("Updated Title", retrieved?.title)
+        assertTrue(retrieved?.isPinned == true)
+        assertTrue(retrieved?.isArchived == true)
+    }
+
+    @Test
     fun testFtsSearch() = runBlocking {
         val note1 = NoteEntity(
             title = "Shopping List",

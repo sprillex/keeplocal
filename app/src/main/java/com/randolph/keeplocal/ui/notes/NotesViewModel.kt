@@ -111,6 +111,14 @@ class NotesViewModel(
         }
     }
 
+    private fun refreshSearchIfSearching() {
+        if (_uiState.value.searchQuery.isNotBlank()) {
+            viewModelScope.launch {
+                executeSearch(_uiState.value.searchQuery, _uiState.value.searchMode)
+            }
+        }
+    }
+
     fun saveNote(
         id: Long = 0,
         title: String,
@@ -129,8 +137,8 @@ class NotesViewModel(
                     noteType = noteType,
                     isPinned = isPinned,
                     isArchived = existing?.isArchived ?: false,
-                    isDeleted = false,
-                    deletedAtEpochMs = null,
+                    isDeleted = existing?.isDeleted ?: false,
+                    deletedAtEpochMs = existing?.deletedAtEpochMs,
                     colorHex = colorHex,
                     updatedAt = System.currentTimeMillis()
                 )
@@ -139,6 +147,7 @@ class NotesViewModel(
 
                 // Auto-embed note in background
                 autoEmbeddingManager.embedAndSaveNote(updatedNote)
+                refreshSearchIfSearching()
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -150,6 +159,7 @@ class NotesViewModel(
             try {
                 val updated = note.copy(isPinned = !note.isPinned, updatedAt = System.currentTimeMillis())
                 noteDao.updateNote(updated)
+                refreshSearchIfSearching()
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -161,6 +171,7 @@ class NotesViewModel(
             try {
                 val updated = note.copy(isArchived = !note.isArchived, updatedAt = System.currentTimeMillis())
                 noteDao.updateNote(updated)
+                refreshSearchIfSearching()
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -176,6 +187,7 @@ class NotesViewModel(
                     updatedAt = System.currentTimeMillis()
                 )
                 noteDao.updateNote(updated)
+                refreshSearchIfSearching()
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -191,6 +203,7 @@ class NotesViewModel(
                     updatedAt = System.currentTimeMillis()
                 )
                 noteDao.updateNote(updated)
+                refreshSearchIfSearching()
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -201,6 +214,7 @@ class NotesViewModel(
         viewModelScope.launch {
             try {
                 noteDao.deleteNote(note)
+                refreshSearchIfSearching()
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -211,6 +225,7 @@ class NotesViewModel(
         viewModelScope.launch {
             try {
                 noteDao.emptyTrash()
+                refreshSearchIfSearching()
             } catch (e: Exception) {
                 e.printStackTrace()
             }
