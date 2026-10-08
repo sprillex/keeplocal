@@ -38,7 +38,7 @@ class EmbeddingRepository(
             }
             interpreter = Interpreter(modelFile, options)
             true
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             e.printStackTrace()
             false
         }
@@ -61,7 +61,7 @@ class EmbeddingRepository(
             }
             interpreter = Interpreter(mappedByteBuffer, options)
             true
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             e.printStackTrace()
             false
         }
@@ -97,7 +97,7 @@ class EmbeddingRepository(
                 val outputBuffer = Array(1) { FloatArray(768) }
                 currentInterpreter.run(arrayOf(text), outputBuffer)
                 return@withContext VectorUtils.sliceAndNormalize(outputBuffer[0], TARGET_DIMENSIONS)
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 e.printStackTrace()
             }
         }

@@ -39,7 +39,7 @@ class NotesViewModel(
                 val thirtyDaysMs = 30L * 24 * 60 * 60 * 1000L
                 val cutoff = System.currentTimeMillis() - thirtyDaysMs
                 noteDao.purgeOldTrashedNotes(cutoff)
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 e.printStackTrace()
             }
         }
@@ -48,7 +48,7 @@ class NotesViewModel(
                 noteDao.getAllActiveNotes().collectLatest { activeNotes ->
                     _uiState.update { it.copy(notes = activeNotes) }
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 e.printStackTrace()
             }
         }
@@ -57,7 +57,7 @@ class NotesViewModel(
                 noteDao.getArchivedNotes().collectLatest { archived ->
                     _uiState.update { it.copy(archivedNotes = archived) }
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 e.printStackTrace()
             }
         }
@@ -66,7 +66,7 @@ class NotesViewModel(
                 noteDao.getTrashedNotes().collectLatest { trash ->
                     _uiState.update { it.copy(trashedNotes = trash) }
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 e.printStackTrace()
             }
         }
@@ -118,7 +118,7 @@ class NotesViewModel(
         try {
             val results = searchRepository.searchNotes(query, mode)
             _uiState.update { it.copy(searchResults = results, isSearching = false) }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             e.printStackTrace()
             _uiState.update { it.copy(isSearching = false) }
         }
@@ -165,7 +165,7 @@ class NotesViewModel(
             // Auto-embed note in background
             autoEmbeddingManager.embedAndSaveNote(finalNote)
             refreshSearchIfSearching()
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             e.printStackTrace()
         }
     }
@@ -203,7 +203,7 @@ class NotesViewModel(
 
             autoEmbeddingManager.embedAndSaveNote(finalNote)
             refreshSearchIfSearching()
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             e.printStackTrace()
         }
     }
@@ -213,7 +213,7 @@ class NotesViewModel(
             val updated = note.copy(isPinned = !note.isPinned, updatedAt = System.currentTimeMillis())
             noteDao.updateNote(updated)
             refreshSearchIfSearching()
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             e.printStackTrace()
         }
     }
@@ -223,7 +223,7 @@ class NotesViewModel(
             val updated = note.copy(isArchived = !note.isArchived, updatedAt = System.currentTimeMillis())
             noteDao.updateNote(updated)
             refreshSearchIfSearching()
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             e.printStackTrace()
         }
     }
@@ -237,7 +237,7 @@ class NotesViewModel(
             )
             noteDao.updateNote(updated)
             refreshSearchIfSearching()
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             e.printStackTrace()
         }
     }
@@ -252,7 +252,7 @@ class NotesViewModel(
                 )
                 noteDao.updateNote(updated)
                 refreshSearchIfSearching()
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 e.printStackTrace()
             }
         }
@@ -263,7 +263,7 @@ class NotesViewModel(
             try {
                 noteDao.deleteNote(note)
                 refreshSearchIfSearching()
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 e.printStackTrace()
             }
         }
@@ -274,7 +274,7 @@ class NotesViewModel(
             try {
                 noteDao.emptyTrash()
                 refreshSearchIfSearching()
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 e.printStackTrace()
             }
         }
@@ -339,7 +339,7 @@ class NotesViewModel(
                     .filter { it.note.id != currentId }
                     .take(3)
                 _uiState.update { it.copy(relatedContextNotes = matches) }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 e.printStackTrace()
             }
         }
