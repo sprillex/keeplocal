@@ -35,8 +35,18 @@ class NotesViewModel(
 
     private fun loadNotes() {
         viewModelScope.launch {
+            val thirtyDaysMs = 30L * 24 * 60 * 60 * 1000L
+            val cutoff = System.currentTimeMillis() - thirtyDaysMs
+            noteDao.purgeOldTrashedNotes(cutoff)
+        }
+        viewModelScope.launch {
             noteDao.getAllActiveNotes().collectLatest { activeNotes ->
                 _uiState.update { it.copy(notes = activeNotes) }
+            }
+        }
+        viewModelScope.launch {
+            noteDao.getTrashedNotes().collectLatest { trash ->
+                _uiState.update { it.copy(trashedNotes = trash) }
             }
         }
     }
@@ -46,6 +56,10 @@ class NotesViewModel(
             val newLayout = if (it.layoutType == LayoutType.GRID) LayoutType.LIST else LayoutType.GRID
             it.copy(layoutType = newLayout)
         }
+    }
+
+    fun setTrashView(isTrash: Boolean) {
+        _uiState.update { it.copy(isTrashView = isTrash, searchQuery = "", searchResults = emptyList()) }
     }
 
     fun setSearchQuery(query: String, debounceMs: Long = 300L): Job {
@@ -89,12 +103,16 @@ class NotesViewModel(
         colorHex: String? = null
     ) {
         viewModelScope.launch {
+            val existing = if (id != 0L) noteDao.getNoteById(id) else null
             val note = NoteEntity(
                 id = id,
                 title = title,
                 content = content,
                 noteType = noteType,
                 isPinned = isPinned,
+                isArchived = existing?.isArchived ?: false,
+                isDeleted = false,
+                deletedAtEpochMs = null,
                 colorHex = colorHex,
                 updatedAt = System.currentTimeMillis()
             )
@@ -115,15 +133,77 @@ class NotesViewModel(
 
     fun archiveNote(note: NoteEntity) {
         viewModelScope.launch {
-            val updated = note.copy(isArchived = true, updatedAt = System.currentTimeMillis())
+            val updated = note.copy(isArchived = !note.isArchived, updatedAt = System.currentTimeMillis())
             noteDao.updateNote(updated)
         }
     }
 
-    fun deleteNote(note: NoteEntity) {
+    fun softDeleteNote(note: NoteEntity) {
+        viewModelScope.launch {
+            val updated = note.copy(
+                isDeleted = true,
+                deletedAtEpochMs = System.currentTimeMillis(),
+                updatedAt = System.currentTimeMillis()
+            )
+            noteDao.updateNote(updated)
+        }
+    }
+
+    fun restoreNote(note: NoteEntity) {
+        viewModelScope.launch {
+            val updated = note.copy(
+                isDeleted = false,
+                deletedAtEpochMs = null,
+                updatedAt = System.currentTimeMillis()
+            )
+            noteDao.updateNote(updated)
+        }
+    }
+
+    fun permanentlyDeleteNote(note: NoteEntity) {
         viewModelScope.launch {
             noteDao.deleteNote(note)
         }
+    }
+
+    fun emptyTrash() {
+        viewModelScope.launch {
+            noteDao.emptyTrash()
+        }
+    }
+
+    fun openNoteDialog(note: NoteEntity) {
+        _uiState.update { it.copy(selectedNoteForDialog = note) }
+    }
+
+    fun dismissNoteDialog() {
+        _uiState.update { it.copy(selectedNoteForDialog = null) }
+    }
+
+    fun promptPermanentDelete(note: NoteEntity) {
+        _uiState.update {
+            it.copy(
+                noteToPermanentlyDelete = note,
+                showPermanentDeleteConfirmDialog = true
+            )
+        }
+    }
+
+    fun dismissPermanentDeletePrompt() {
+        _uiState.update {
+            it.copy(
+                noteToPermanentlyDelete = null,
+                showPermanentDeleteConfirmDialog = false
+            )
+        }
+    }
+
+    fun promptEmptyTrash() {
+        _uiState.update { it.copy(showEmptyTrashConfirmDialog = true) }
+    }
+
+    fun dismissEmptyTrashPrompt() {
+        _uiState.update { it.copy(showEmptyTrashConfirmDialog = false) }
     }
 
     fun selectNoteForEditing(note: NoteEntity?) {

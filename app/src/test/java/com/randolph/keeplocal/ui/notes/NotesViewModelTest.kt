@@ -12,13 +12,15 @@ import com.randolph.keeplocal.data.repository.SearchMode
 import com.randolph.keeplocal.data.repository.SearchRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -76,17 +78,113 @@ class NotesViewModelTest {
         val savedNote = note.copy(id = savedId)
         autoEmbeddingManager.embedAndSaveNote(savedNote)
 
-        var retries = 0
-        while (viewModel.uiState.value.notes.isEmpty() && retries < 20) {
-            delay(50)
-            retries++
-        }
-
         viewModel.setSearchMode(SearchMode.HYBRID)
         viewModel.setSearchQuery("Search", debounceMs = 0L).join()
 
         val searchResults = viewModel.uiState.value.searchResults
         assertTrue("Search results should not be empty", searchResults.isNotEmpty())
         assertEquals("Local AI Search", searchResults[0].note.title)
+    }
+
+    @Test
+    fun testSoftDeleteAndRestoreNote() = runTest {
+        val note = NoteEntity(
+            title = "Note to Soft Delete",
+            content = "Content to move to trash.",
+            noteType = NoteType.TEXT
+        )
+        val savedId = db.noteDao().insertNote(note)
+        val savedNote = note.copy(id = savedId)
+
+        val active1 = db.noteDao().getAllActiveNotes().first()
+        assertEquals(1, active1.size)
+
+        // Soft delete
+        viewModel.softDeleteNote(savedNote)
+
+        val active2 = db.noteDao().getAllActiveNotes().first()
+        val trashed2 = db.noteDao().getTrashedNotes().first()
+
+        assertEquals(0, active2.size)
+        assertEquals(1, trashed2.size)
+        assertTrue(trashed2[0].isDeleted)
+
+        // Restore
+        viewModel.restoreNote(trashed2[0])
+
+        val active3 = db.noteDao().getAllActiveNotes().first()
+        val trashed3 = db.noteDao().getTrashedNotes().first()
+
+        assertEquals(1, active3.size)
+        assertEquals(0, trashed3.size)
+        assertFalse(active3[0].isDeleted)
+    }
+
+    @Test
+    fun testPermanentDeleteAndEmptyTrash() = runTest {
+        val note1 = NoteEntity(title = "Note 1", content = "Test 1", noteType = NoteType.TEXT, isDeleted = true, deletedAtEpochMs = System.currentTimeMillis())
+        val note2 = NoteEntity(title = "Note 2", content = "Test 2", noteType = NoteType.TEXT, isDeleted = true, deletedAtEpochMs = System.currentTimeMillis())
+        val id1 = db.noteDao().insertNote(note1)
+        val id2 = db.noteDao().insertNote(note2)
+
+        val savedNote1 = note1.copy(id = id1)
+        val savedNote2 = note2.copy(id = id2)
+
+        val trashed1 = db.noteDao().getTrashedNotes().first()
+        assertEquals(2, trashed1.size)
+
+        // Permanently delete note 1
+        viewModel.permanentlyDeleteNote(savedNote1)
+
+        val trashed2 = db.noteDao().getTrashedNotes().first()
+        assertEquals(1, trashed2.size)
+        assertEquals(id2, trashed2[0].id)
+
+        // Empty trash
+        viewModel.emptyTrash()
+
+        val trashed3 = db.noteDao().getTrashedNotes().first()
+        assertEquals(0, trashed3.size)
+    }
+
+    @Test
+    fun testThirtyDayPurgeOldTrashOnStartup() = runTest {
+        val thirtyOneDaysAgo = System.currentTimeMillis() - (31L * 24 * 60 * 60 * 1000L)
+        val oldNote = NoteEntity(
+            title = "Old Note",
+            content = "Expired in trash",
+            noteType = NoteType.TEXT,
+            isDeleted = true,
+            deletedAtEpochMs = thirtyOneDaysAgo
+        )
+        db.noteDao().insertNote(oldNote)
+
+        val trashedBefore = db.noteDao().getTrashedNotes().first()
+        assertEquals(1, trashedBefore.size)
+
+        // Instantiate new ViewModel which runs purgeOldTrashedNotes
+        NotesViewModel(db.noteDao(), searchRepository, autoEmbeddingManager)
+
+        val trashedAfter = db.noteDao().getTrashedNotes().first()
+        assertEquals(0, trashedAfter.size)
+    }
+
+    @Test
+    fun testNoteDialogStateHandling() {
+        val note = NoteEntity(title = "Dialog Note", content = "Test", noteType = NoteType.TEXT, id = 123)
+
+        viewModel.openNoteDialog(note)
+        assertEquals(note, viewModel.uiState.value.selectedNoteForDialog)
+
+        viewModel.dismissNoteDialog()
+        assertNull(viewModel.uiState.value.selectedNoteForDialog)
+
+        viewModel.promptPermanentDelete(note)
+        assertTrue(viewModel.uiState.value.showPermanentDeleteConfirmDialog)
+        assertEquals(note, viewModel.uiState.value.noteToPermanentlyDelete)
+
+        viewModel.dismissPermanentDeletePrompt()
+        assertFalse(viewModel.uiState.value.showPermanentDeleteConfirmDialog)
+        assertNull(viewModel.uiState.value.noteToPermanentlyDelete)
     }
 }

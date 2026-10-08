@@ -80,7 +80,7 @@ class SearchRepository(
         val results = mutableListOf<SearchResult>()
         for (pair in noteScores) {
             val note = noteDao.getNoteById(pair.first)
-            if (note != null && !note.isArchived) {
+            if (note != null && !note.isArchived && !note.isDeleted) {
                 results.add(
                     SearchResult(
                         note = note,
@@ -125,7 +125,7 @@ class SearchRepository(
 
         val combinedList = rrfScores.mapNotNull { (noteId, rrfScore) ->
             val note = notesMap[noteId] ?: noteDao.getNoteById(noteId)
-            if (note != null && !note.isArchived) {
+            if (note != null && !note.isArchived && !note.isDeleted) {
                 SearchResult(
                     note = note,
                     score = rrfScore,

@@ -23,17 +23,26 @@ interface NoteDao {
     @Query("SELECT * FROM notes WHERE id = :id")
     suspend fun getNoteById(id: Long): NoteEntity?
 
-    @Query("SELECT * FROM notes WHERE isArchived = 0 ORDER BY isPinned DESC, updatedAt DESC")
+    @Query("SELECT * FROM notes WHERE isArchived = 0 AND isDeleted = 0 ORDER BY isPinned DESC, updatedAt DESC")
     fun getAllActiveNotes(): Flow<List<NoteEntity>>
 
-    @Query("SELECT * FROM notes WHERE isArchived = 1 ORDER BY updatedAt DESC")
+    @Query("SELECT * FROM notes WHERE isArchived = 1 AND isDeleted = 0 ORDER BY updatedAt DESC")
     fun getArchivedNotes(): Flow<List<NoteEntity>>
+
+    @Query("SELECT * FROM notes WHERE isDeleted = 1 ORDER BY deletedAtEpochMs DESC, updatedAt DESC")
+    fun getTrashedNotes(): Flow<List<NoteEntity>>
 
     @Query("""
         SELECT notes.* FROM notes
         JOIN notes_fts ON notes.rowid = notes_fts.rowid
-        WHERE notes_fts MATCH :query AND notes.isArchived = 0
+        WHERE notes_fts MATCH :query AND notes.isArchived = 0 AND notes.isDeleted = 0
         ORDER BY notes.updatedAt DESC
     """)
     fun searchNotesFts(query: String): Flow<List<NoteEntity>>
+
+    @Query("DELETE FROM notes WHERE isDeleted = 1 AND deletedAtEpochMs IS NOT NULL AND deletedAtEpochMs < :cutoffTimeMs")
+    suspend fun purgeOldTrashedNotes(cutoffTimeMs: Long)
+
+    @Query("DELETE FROM notes WHERE isDeleted = 1")
+    suspend fun emptyTrash()
 }

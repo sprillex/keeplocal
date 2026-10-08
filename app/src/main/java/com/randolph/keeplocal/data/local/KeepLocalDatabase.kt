@@ -19,7 +19,7 @@ import com.randolph.keeplocal.data.local.entity.NoteFtsEntity
         NoteEmbeddingEntity::class,
         NoteFtsEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

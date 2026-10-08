@@ -19,8 +19,7 @@ fun NoteList(
     notes: List<NoteEntity>,
     layoutType: LayoutType,
     onNoteClick: (NoteEntity) -> Unit,
-    onPinClick: (NoteEntity) -> Unit,
-    onArchiveClick: (NoteEntity) -> Unit,
+    onNoteLongClick: (NoteEntity) -> Unit,
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(16.dp)
 ) {
@@ -36,8 +35,7 @@ fun NoteList(
                 NoteCard(
                     note = note,
                     onClick = { onNoteClick(note) },
-                    onPinClick = { onPinClick(note) },
-                    onArchiveClick = { onArchiveClick(note) }
+                    onLongClick = { onNoteLongClick(note) }
                 )
             }
         }
@@ -51,8 +49,7 @@ fun NoteList(
                 NoteCard(
                     note = note,
                     onClick = { onNoteClick(note) },
-                    onPinClick = { onPinClick(note) },
-                    onArchiveClick = { onArchiveClick(note) }
+                    onLongClick = { onNoteLongClick(note) }
                 )
             }
         }
