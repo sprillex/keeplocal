@@ -121,14 +121,12 @@ fun NoteCard(
             }
 
             if (note.imageUris.isNotEmpty()) {
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    items(note.imageUris.take(4), key = { it }) { uriStr ->
-                        NoteCardImageThumbnail(uriString = uriStr)
-                    }
-                }
+                KeepImageGrid(
+                    imageUris = note.imageUris,
+                    maxHeight = 160.dp,
+                    onImageClick = { onClick() },
+                    modifier = Modifier.fillMaxWidth()
+                )
                 if (note.content.isNotBlank()) {
                     Spacer(modifier = Modifier.height(8.dp))
                 }

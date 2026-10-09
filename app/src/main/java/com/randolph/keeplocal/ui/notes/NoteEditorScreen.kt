@@ -92,7 +92,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.randolph.keeplocal.data.local.entity.NoteEntity
+import com.randolph.keeplocal.ui.components.KeepImageGrid
+import com.randolph.keeplocal.util.ImageDecoder
 import com.randolph.keeplocal.data.local.entity.NoteType
 import com.randolph.keeplocal.data.repository.SearchResult
 import kotlinx.coroutines.Dispatchers
@@ -124,12 +128,12 @@ fun NoteEditorScreen(
 ) {
     val context = LocalContext.current
 
-    var title by remember(note) { mutableStateOf(note?.title ?: "") }
-    var content by remember(note) { mutableStateOf(note?.content ?: "") }
-    var isPinned by remember(note) { mutableStateOf(note?.isPinned ?: false) }
-    var selectedNoteType by remember(note) { mutableStateOf(note?.noteType ?: NoteType.TEXT) }
-    var imageUris by remember(note) { mutableStateOf(note?.imageUris ?: emptyList()) }
-    var selectedColor by remember(note) {
+    var title by remember(note?.id) { mutableStateOf(note?.title ?: "") }
+    var content by remember(note?.id) { mutableStateOf(note?.content ?: "") }
+    var isPinned by remember(note?.id) { mutableStateOf(note?.isPinned ?: false) }
+    var selectedNoteType by remember(note?.id) { mutableStateOf(note?.noteType ?: NoteType.TEXT) }
+    var imageUris by remember(note?.id) { mutableStateOf(note?.imageUris ?: emptyList()) }
+    var selectedColor by remember(note?.id) {
         mutableStateOf(
             if (note?.colorHex != null) {
                 try { Color(android.graphics.Color.parseColor(note.colorHex)) } catch (e: Exception) { Color.Transparent }
@@ -140,11 +144,22 @@ fun NoteEditorScreen(
     var showMenu by remember { mutableStateOf(false) }
     var showColorPalette by remember { mutableStateOf(false) }
     var isDrawerExpanded by remember { mutableStateOf(false) }
+    var selectedLightboxIndex by remember { mutableStateOf<Int?>(null) }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents()
     ) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
+            uris.forEach { uri ->
+                try {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                } catch (e: Exception) {
+                    // Ignore if permission taking is not supported for uri
+                }
+            }
             val newUris = uris.map { it.toString() }
             imageUris = (imageUris + newUris).distinct()
         }
@@ -164,6 +179,14 @@ fun NoteEditorScreen(
                 for (i in 0 until clipData.itemCount) {
                     val uri = clipData.getItemAt(i).uri
                     if (uri != null) {
+                        try {
+                            context.contentResolver.takePersistableUriPermission(
+                                uri,
+                                Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            )
+                        } catch (e: Exception) {
+                            // Ignore if permission taking is not supported for uri
+                        }
                         newUris.add(uri.toString())
                     }
                 }
@@ -532,22 +555,21 @@ fun NoteEditorScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 if (imageUris.isNotEmpty()) {
-                    Column(
+                    KeepImageGrid(
+                        imageUris = imageUris,
+                        maxHeight = 240.dp,
+                        onImageClick = { index ->
+                            selectedLightboxIndex = index
+                        },
+                        onImageRemove = { index ->
+                            if (index in imageUris.indices) {
+                                imageUris = imageUris.toMutableList().apply { removeAt(index) }
+                            }
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        for (uriStr in imageUris) {
-                            NoteImageThumbnail(
-                                uriString = uriStr,
-                                onRemove = {
-                                    imageUris = imageUris.filter { it != uriStr }
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
+                            .padding(vertical = 8.dp)
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
@@ -575,6 +597,139 @@ fun NoteEditorScreen(
                         unfocusedIndicatorColor = Color.Transparent
                     )
                 )
+            }
+        }
+    }
+
+    selectedLightboxIndex?.let { index ->
+        if (index in imageUris.indices) {
+            LightboxModal(
+                imageUris = imageUris,
+                initialIndex = index,
+                onDismiss = { selectedLightboxIndex = null }
+            )
+        }
+    }
+}
+
+@Composable
+fun LightboxModal(
+    imageUris: List<String>,
+    initialIndex: Int,
+    onDismiss: () -> Unit
+) {
+    var currentIndex by remember { mutableStateOf(initialIndex) }
+    val context = LocalContext.current
+    val currentUri = imageUris.getOrNull(currentIndex) ?: return
+
+    val bitmapState = remember(currentUri) { mutableStateOf<ImageBitmap?>(null) }
+
+    LaunchedEffect(currentUri) {
+        bitmapState.value = ImageDecoder.loadDownsampledBitmap(context, currentUri, 1200, 1600)
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            val bitmap = bitmapState.value
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = "Full view image",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Image,
+                        contentDescription = "Loading image",
+                        tint = Color.White.copy(alpha = 0.5f),
+                        modifier = Modifier.size(64.dp)
+                    )
+                }
+            }
+
+            // Top bar overlay with close button and index indicator
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .align(Alignment.TopCenter),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = "Close preview",
+                        tint = Color.White
+                    )
+                }
+
+                if (imageUris.size > 1) {
+                    Text(
+                        text = "${currentIndex + 1} of ${imageUris.size}",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White,
+                        modifier = Modifier
+                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
+            }
+
+            // Navigation overlays for multi-image lightbox
+            if (imageUris.size > 1) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 32.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    if (currentIndex > 0) {
+                        Surface(
+                            onClick = { currentIndex-- },
+                            shape = CircleShape,
+                            color = Color.Black.copy(alpha = 0.6f),
+                            contentColor = Color.White
+                        ) {
+                            Text(
+                                text = "◄ Previous",
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                        }
+                    }
+                    if (currentIndex < imageUris.size - 1) {
+                        Surface(
+                            onClick = { currentIndex++ },
+                            shape = CircleShape,
+                            color = Color.Black.copy(alpha = 0.6f),
+                            contentColor = Color.White
+                        ) {
+                            Text(
+                                text = "Next ►",
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                        }
+                    }
+                }
             }
         }
     }

@@ -248,6 +248,48 @@ class NotesViewModelTest {
     }
 
     @Test
+    fun testEditInitializationAndMultiImageStatePreservation() = runTest {
+        val initialUris = listOf("content://media/external/images/media/1", "content://media/external/images/media/2")
+        val note = NoteEntity(
+            title = "Initial Title",
+            content = "Initial Body Text",
+            noteType = NoteType.TEXT,
+            imageUris = initialUris
+        )
+        val id = db.noteDao().insertNote(note)
+        val savedNote = note.copy(id = id)
+
+        // Select note for editing
+        viewModel.selectNoteForEditing(savedNote)
+        assertEquals(savedNote, viewModel.uiState.value.selectedNoteForEditing)
+
+        // Simulate background updates (e.g., related context flow emissions)
+        viewModel.loadRelatedContextForDraft("Initial Title", "Initial Body Text")
+        delay(300)
+
+        // Verify selectedNoteForEditing still holds complete original text and image attachments
+        val currentEditNote = viewModel.uiState.value.selectedNoteForEditing
+        assertEquals("Initial Title", currentEditNote?.title)
+        assertEquals("Initial Body Text", currentEditNote?.content)
+        assertEquals(2, currentEditNote?.imageUris?.size)
+
+        // Save updated note with an additional image attachment
+        val updatedUris = initialUris + "content://media/external/images/media/3"
+        viewModel.saveNote(
+            id = id,
+            title = "Updated Title",
+            content = "Updated Body Text",
+            noteType = NoteType.TEXT,
+            imageUris = updatedUris
+        ).join()
+
+        val fetchedNote = db.noteDao().getNoteById(id)
+        assertEquals("Updated Title", fetchedNote?.title)
+        assertEquals("Updated Body Text", fetchedNote?.content)
+        assertEquals(3, fetchedNote?.imageUris?.size)
+    }
+
+    @Test
     fun testArchiveAndUnarchiveNote() = runTest {
         val note = NoteEntity(title = "Archive Test", content = "Content", noteType = NoteType.TEXT)
         val id = db.noteDao().insertNote(note)
