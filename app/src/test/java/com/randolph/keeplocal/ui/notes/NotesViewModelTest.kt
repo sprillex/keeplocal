@@ -215,6 +215,22 @@ class NotesViewModelTest {
     }
 
     @Test
+    fun testPasteImageFromClipboard() {
+        val context: Context = ApplicationProvider.getApplicationContext()
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        val clipData = android.content.ClipData.newUri(
+            context.contentResolver,
+            "Pasted Image",
+            android.net.Uri.parse("content://media/external/images/media/501")
+        )
+        clipboard.setPrimaryClip(clipData)
+
+        val pastedUris = pasteImageFromClipboard(context)
+        assertEquals(1, pastedUris.size)
+        assertEquals("content://media/external/images/media/501", pastedUris[0])
+    }
+
+    @Test
     fun testSaveNoteWithPictures() = runTest {
         val imageUris = listOf("content://media/external/images/media/201")
         viewModel.saveNote(
