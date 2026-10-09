@@ -233,6 +233,21 @@ fun NoteEditorScreen(
         }
     }
 
+    fun performAutoSave() {
+        if (title.isNotBlank() || content.isNotBlank() || imageUris.isNotEmpty()) {
+            val finalColorHex = if (selectedColor == Color.Transparent) null else String.format("#%06X", 0xFFFFFF and selectedColor.toArgb())
+            onBackAndSave(note?.id ?: 0, title, content, selectedNoteType, isPinned, finalColorHex, imageUris)
+        }
+    }
+
+    // Auto-save whenever image attachments are added or updated
+    val noteImageUris = note?.imageUris ?: emptyList<String>()
+    LaunchedEffect(imageUris) {
+        if (imageUris.isNotEmpty() && imageUris != noteImageUris) {
+            performAutoSave()
+        }
+    }
+
     fun saveAndExit() {
         val finalColorHex = if (selectedColor == Color.Transparent) null else String.format("#%06X", 0xFFFFFF and selectedColor.toArgb())
         onBackAndSave(note?.id ?: 0, title, content, selectedNoteType, isPinned, finalColorHex, imageUris)
