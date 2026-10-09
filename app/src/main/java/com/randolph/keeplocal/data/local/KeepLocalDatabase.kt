@@ -44,7 +44,7 @@ abstract class KeepLocalDatabase : RoomDatabase() {
             """.trimIndent())
             db.execSQL("""
                 CREATE TRIGGER IF NOT EXISTS notes_fts_ad AFTER DELETE ON notes BEGIN
-                    INSERT INTO notes_fts(notes_fts, rowid, title, content) VALUES('delete', old.id, old.title, old.content);
+                    DELETE FROM notes_fts WHERE rowid = old.id;
                 END;
             """.trimIndent())
             db.execSQL("""
