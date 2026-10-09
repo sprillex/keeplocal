@@ -113,6 +113,23 @@ class KeepLocalDatabaseTest {
     }
 
     @Test
+    fun testNoteWithImageUris() = runBlocking {
+        val note = NoteEntity(
+            title = "Photo Note",
+            content = "Note with picture attachments.",
+            noteType = NoteType.TEXT,
+            imageUris = listOf("content://media/external/images/media/101", "content://media/external/images/media/102")
+        )
+        val noteId = noteDao.insertNote(note)
+
+        val retrieved = noteDao.getNoteById(noteId)
+        assertNotNull(retrieved)
+        assertEquals(2, retrieved?.imageUris?.size)
+        assertEquals("content://media/external/images/media/101", retrieved?.imageUris?.get(0))
+        assertEquals("content://media/external/images/media/102", retrieved?.imageUris?.get(1))
+    }
+
+    @Test
     fun testNoteEmbeddingsForeignKeysAndOperations() = runBlocking {
         val note = NoteEntity(
             title = "Vector Note",

@@ -33,7 +33,8 @@ class BackupArchiverTest {
                 title = "Backup Test Note",
                 content = "Testing local archive serialization.",
                 noteType = NoteType.TEXT,
-                isPinned = true
+                isPinned = true,
+                imageUris = listOf("content://media/external/images/media/301")
             ),
             NoteEntity(
                 id = 2,
@@ -51,6 +52,8 @@ class BackupArchiverTest {
         assertEquals(1L, restored[0].id)
         assertEquals("Backup Test Note", restored[0].title)
         assertTrue(restored[0].isPinned)
+        assertEquals(1, restored[0].imageUris.size)
+        assertEquals("content://media/external/images/media/301", restored[0].imageUris[0])
         assertEquals(NoteType.CHECKLIST, restored[1].noteType)
     }
 

@@ -138,7 +138,8 @@ class NotesViewModel(
         content: String,
         noteType: NoteType = NoteType.TEXT,
         isPinned: Boolean = false,
-        colorHex: String? = null
+        colorHex: String? = null,
+        imageUris: List<String> = emptyList()
     ): Job = viewModelScope.launch {
         try {
             val existing = if (id != 0L) noteDao.getNoteById(id) else null
@@ -152,6 +153,7 @@ class NotesViewModel(
                 isDeleted = existing?.isDeleted ?: false,
                 deletedAtEpochMs = existing?.deletedAtEpochMs,
                 colorHex = colorHex,
+                imageUris = imageUris,
                 updatedAt = System.currentTimeMillis()
             )
             val finalNote = if (id != 0L) {
@@ -176,7 +178,8 @@ class NotesViewModel(
         content: String,
         noteType: NoteType = NoteType.TEXT,
         isPinned: Boolean = false,
-        colorHex: String? = null
+        colorHex: String? = null,
+        imageUris: List<String> = emptyList()
     ): Job = viewModelScope.launch {
         try {
             val existing = if (id != 0L) noteDao.getNoteById(id) else null
@@ -191,6 +194,7 @@ class NotesViewModel(
                 isDeleted = existing?.isDeleted ?: false,
                 deletedAtEpochMs = existing?.deletedAtEpochMs,
                 colorHex = colorHex,
+                imageUris = imageUris,
                 updatedAt = System.currentTimeMillis()
             )
             val finalNote = if (id != 0L) {

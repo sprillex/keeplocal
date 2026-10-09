@@ -15,5 +15,6 @@ data class NoteEntity(
     val deletedAtEpochMs: Long? = null,
     val reminderEpochMs: Long? = null,
     val colorHex: String? = null,
+    val imageUris: List<String> = emptyList(),
     val updatedAt: Long = System.currentTimeMillis()
 )
