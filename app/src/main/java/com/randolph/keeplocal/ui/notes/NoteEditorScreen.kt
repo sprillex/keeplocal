@@ -126,6 +126,7 @@ val PASTEL_NOTE_COLORS = listOf(
 fun NoteEditorScreen(
     note: NoteEntity?,
     relatedContextMatches: List<SearchResult>,
+    onSaveDraft: (id: Long, title: String, content: String, noteType: NoteType, isPinned: Boolean, colorHex: String?, imageUris: List<String>) -> Unit,
     onBackAndSave: (id: Long, title: String, content: String, noteType: NoteType, isPinned: Boolean, colorHex: String?, imageUris: List<String>) -> Unit,
     onDelete: (NoteEntity) -> Unit,
     onArchive: (NoteEntity) -> Unit,
@@ -247,7 +248,7 @@ fun NoteEditorScreen(
     fun performAutoSave() {
         if (title.isNotBlank() || content.isNotBlank() || imageUris.isNotEmpty()) {
             val finalColorHex = if (selectedColor == Color.Transparent) null else String.format("#%06X", 0xFFFFFF and selectedColor.toArgb())
-            onBackAndSave(currentSavedId, title, content, selectedNoteType, isPinned, finalColorHex, imageUris)
+            onSaveDraft(currentSavedId, title, content, selectedNoteType, isPinned, finalColorHex, imageUris)
         }
     }
 
@@ -385,7 +386,6 @@ fun NoteEditorScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(if (selectedColor == Color.Transparent) MaterialTheme.colorScheme.surface else selectedColor)
-                    .imePadding()
                     .navigationBarsPadding()
             ) {
                 // Collapsible Related Local Notes Drawer
