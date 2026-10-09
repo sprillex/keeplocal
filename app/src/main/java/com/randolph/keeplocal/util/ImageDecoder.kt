@@ -3,6 +3,9 @@ package com.randolph.keeplocal.util
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
+import java.io.File
+import java.io.FileOutputStream
+import java.util.UUID
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import kotlinx.coroutines.Dispatchers
@@ -57,5 +60,33 @@ object ImageDecoder {
             }
         }
         return inSampleSize
+    }
+
+    suspend fun saveImageToInternalStorage(context: Context, uri: Uri): String = withContext(Dispatchers.IO) {
+        if (uri.scheme == "file" && uri.path?.startsWith(context.filesDir.absolutePath) == true) {
+            return@withContext uri.toString()
+        }
+
+        try {
+            val imagesDir = File(context.filesDir, "note_images").apply {
+                if (!exists()) mkdirs()
+            }
+            val fileName = "img_${UUID.randomUUID()}.jpg"
+            val destFile = File(imagesDir, fileName)
+
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                FileOutputStream(destFile).use { outputStream ->
+                    inputStream.copyTo(outputStream)
+                }
+            }
+            if (destFile.exists() && destFile.length() > 0) {
+                Uri.fromFile(destFile).toString()
+            } else {
+                uri.toString()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            uri.toString()
+        }
     }
 }

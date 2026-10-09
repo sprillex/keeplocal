@@ -105,6 +105,7 @@ import com.randolph.keeplocal.util.ImageDecoder
 import com.randolph.keeplocal.data.local.entity.NoteType
 import com.randolph.keeplocal.data.repository.SearchResult
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -151,56 +152,68 @@ fun NoteEditorScreen(
     var isDrawerExpanded by remember { mutableStateOf(false) }
     var selectedLightboxIndex by remember { mutableStateOf<Int?>(null) }
 
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents()
     ) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
-            uris.forEach { uri ->
-                try {
-                    context.contentResolver.takePersistableUriPermission(
-                        uri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION
-                    )
-                } catch (e: Exception) {
-                    // Ignore if permission taking is not supported for uri
+            scope.launch {
+                val savedUris = mutableListOf<String>()
+                uris.forEach { uri ->
+                    try {
+                        context.contentResolver.takePersistableUriPermission(
+                            uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        )
+                    } catch (e: Exception) {
+                        // Ignore
+                    }
+                    val savedPath = ImageDecoder.saveImageToInternalStorage(context, uri)
+                    savedUris.add(savedPath)
                 }
+                imageUris = (imageUris + savedUris).distinct()
             }
-            val newUris = uris.map { it.toString() }
-            imageUris = (imageUris + newUris).distinct()
         }
     }
 
     val view = LocalView.current
     DisposableEffect(view) {
         val listener = OnReceiveContentListener { _, payload ->
-            val split = payload.partition { item ->
-                item.uri != null
-            }
+            val split = payload.partition { item -> item.uri != null }
             val imageClip = split.first
             val remaining = split.second
+
             if (imageClip != null) {
                 val clipData = imageClip.clip
-                val newUris = mutableListOf<String>()
+                val urisToSave = mutableListOf<Uri>()
                 for (i in 0 until clipData.itemCount) {
                     val uri = clipData.getItemAt(i).uri
                     if (uri != null) {
-                        try {
-                            context.contentResolver.takePersistableUriPermission(
-                                uri,
-                                Intent.FLAG_GRANT_READ_URI_PERMISSION
-                            )
-                        } catch (e: Exception) {
-                            // Ignore if permission taking is not supported for uri
-                        }
-                        newUris.add(uri.toString())
+                        urisToSave.add(uri)
                     }
                 }
-                if (newUris.isNotEmpty()) {
-                    imageUris = (imageUris + newUris).distinct()
-                    Toast.makeText(context, "Pasted ${newUris.size} image(s)", Toast.LENGTH_SHORT).show()
+                if (urisToSave.isNotEmpty()) {
+                    scope.launch {
+                        val savedUris = mutableListOf<String>()
+                        urisToSave.forEach { uri ->
+                            try {
+                                context.contentResolver.takePersistableUriPermission(
+                                    uri,
+                                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                )
+                            } catch (e: Exception) {
+                                // Ignore
+                            }
+                            val savedPath = ImageDecoder.saveImageToInternalStorage(context, uri)
+                            savedUris.add(savedPath)
+                        }
+                        imageUris = (imageUris + savedUris).distinct()
+                        Toast.makeText(context, "Pasted ${savedUris.size} image(s)", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
-            remaining
+            null // Consume image payload completely so text fields do not receive \uFFFC
         }
         ViewCompat.setOnReceiveContentListener(view, arrayOf("image/*"), listener)
         onDispose {
@@ -530,7 +543,7 @@ fun NoteEditorScreen(
                 // Borderless Title Input (MaterialTheme.typography.titleLarge)
                 TextField(
                     value = title,
-                    onValueChange = { title = it },
+                    onValueChange = { title = sanitizeText(it) },
                     placeholder = {
                         Text(
                             text = "Title",
@@ -581,7 +594,7 @@ fun NoteEditorScreen(
                 // Borderless Body Input (MaterialTheme.typography.bodyLarge)
                 TextField(
                     value = content,
-                    onValueChange = { content = it },
+                    onValueChange = { content = sanitizeText(it) },
                     placeholder = {
                         Text(
                             text = "Note",
@@ -770,6 +783,10 @@ fun LightboxModal(
             }
         }
     }
+}
+
+fun sanitizeText(text: String): String {
+    return text.replace("\uFFFC", "").replace("\uFFFD", "")
 }
 
 fun pasteImageFromClipboard(context: Context): List<String> {
