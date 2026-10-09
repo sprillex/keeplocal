@@ -33,16 +33,20 @@ class AutoEmbeddingManager(
     }
 
     suspend fun embedAndSaveNote(note: NoteEntity) = withContext(Dispatchers.IO) {
-        val formattedInput = embeddingRepository.formatDocumentInput(note.title, note.content)
-        val vectorFloats = embeddingRepository.generateEmbedding(formattedInput)
-        val vectorBytes = VectorUtils.floatArrayToByteArray(vectorFloats)
+        try {
+            val formattedInput = embeddingRepository.formatDocumentInput(note.title, note.content)
+            val vectorFloats = embeddingRepository.generateEmbedding(formattedInput)
+            val vectorBytes = VectorUtils.floatArrayToByteArray(vectorFloats)
 
-        val embeddingEntity = NoteEmbeddingEntity(
-            noteId = note.id,
-            vector = vectorBytes,
-            dimensions = VectorUtils.DEFAULT_EMBEDDING_DIM,
-            updatedAt = System.currentTimeMillis()
-        )
-        noteEmbeddingDao.insertEmbedding(embeddingEntity)
+            val embeddingEntity = NoteEmbeddingEntity(
+                noteId = note.id,
+                vector = vectorBytes,
+                dimensions = VectorUtils.DEFAULT_EMBEDDING_DIM,
+                updatedAt = System.currentTimeMillis()
+            )
+            noteEmbeddingDao.insertEmbedding(embeddingEntity)
+        } catch (t: Throwable) {
+            t.printStackTrace()
+        }
     }
 }

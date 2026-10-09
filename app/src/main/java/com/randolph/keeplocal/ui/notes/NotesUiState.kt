@@ -11,7 +11,9 @@ enum class LayoutType {
 
 data class NotesUiState(
     val notes: List<NoteEntity> = emptyList(),
+    val archivedNotes: List<NoteEntity> = emptyList(),
     val trashedNotes: List<NoteEntity> = emptyList(),
+    val isArchiveView: Boolean = false,
     val isTrashView: Boolean = false,
     val searchResults: List<SearchResult> = emptyList(),
     val searchQuery: String = "",

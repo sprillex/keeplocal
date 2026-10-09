@@ -186,4 +186,58 @@ class NotesViewModelTest {
         assertFalse(viewModel.uiState.value.showPermanentDeleteConfirmDialog)
         assertNull(viewModel.uiState.value.noteToPermanentlyDelete)
     }
+
+    @Test
+    fun testPinUnpinAndEditExistingNote() = runTest {
+        val note = NoteEntity(title = "Original Title", content = "Original Content", noteType = NoteType.TEXT)
+        val id = db.noteDao().insertNote(note)
+        val saved = note.copy(id = id)
+
+        // Toggle pin and wait for completion
+        viewModel.togglePinNote(saved).join()
+
+        val updated = db.noteDao().getNoteById(id)
+        assertTrue("Note should be pinned", updated?.isPinned == true)
+
+        // Save edit to existing note without generating new ID or losing vector
+        viewModel.saveNote(
+            id = id,
+            title = "Edited Title",
+            content = "Edited Content",
+            noteType = NoteType.TEXT,
+            isPinned = true
+        ).join()
+
+        val edited = db.noteDao().getNoteById(id)
+        assertEquals("Edited Title", edited?.title)
+        assertEquals("Edited Content", edited?.content)
+        assertTrue("Edited note should maintain pin state", edited?.isPinned == true)
+    }
+
+    @Test
+    fun testArchiveAndUnarchiveNote() = runTest {
+        val note = NoteEntity(title = "Archive Test", content = "Content", noteType = NoteType.TEXT)
+        val id = db.noteDao().insertNote(note)
+        val saved = note.copy(id = id)
+
+        // Archive note
+        viewModel.archiveNote(saved).join()
+
+        val active = db.noteDao().getAllActiveNotes().first()
+        val archived = db.noteDao().getArchivedNotes().first()
+
+        assertEquals(0, active.size)
+        assertEquals(1, archived.size)
+        assertTrue(archived[0].isArchived)
+
+        // Unarchive note
+        viewModel.archiveNote(archived[0]).join()
+
+        val active2 = db.noteDao().getAllActiveNotes().first()
+        val archived2 = db.noteDao().getArchivedNotes().first()
+
+        assertEquals(1, active2.size)
+        assertEquals(0, archived2.size)
+        assertFalse(active2[0].isArchived)
+    }
 }

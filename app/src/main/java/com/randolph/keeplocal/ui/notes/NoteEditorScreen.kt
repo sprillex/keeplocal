@@ -186,7 +186,11 @@ fun NoteEditorScreen(
                             text = { Text("Delete") },
                             onClick = {
                                 showMenu = false
-                                if (note != null) onDelete(note)
+                                if (note != null) {
+                                    onDelete(note)
+                                } else {
+                                    // Draft note cancelled, exit without saving
+                                }
                             },
                             leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) }
                         )
@@ -194,8 +198,21 @@ fun NoteEditorScreen(
                             text = { Text("Archive") },
                             onClick = {
                                 showMenu = false
-                                if (note != null) onArchive(note)
-                                saveAndExit()
+                                val finalColorHex = if (selectedColor == Color.Transparent) null else String.format("#%06X", 0xFFFFFF and selectedColor.toArgb())
+                                onArchive(note?.copy(
+                                    title = title,
+                                    content = content,
+                                    noteType = selectedNoteType,
+                                    isPinned = isPinned,
+                                    colorHex = finalColorHex
+                                ) ?: NoteEntity(
+                                    title = title,
+                                    content = content,
+                                    noteType = selectedNoteType,
+                                    isPinned = isPinned,
+                                    colorHex = finalColorHex,
+                                    isArchived = true
+                                ))
                             }
                         )
                         DropdownMenuItem(
