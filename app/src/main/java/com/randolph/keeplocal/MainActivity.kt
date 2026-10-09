@@ -113,9 +113,9 @@ class MainActivity : ComponentActivity() {
                         Screen.NOTE_EDITOR -> NoteEditorScreen(
                             note = uiState.selectedNoteForEditing,
                             relatedContextMatches = uiState.relatedContextNotes,
-                            onBackAndSave = { id, title, content, type, isPinned, colorHex ->
-                                if (title.isNotBlank() || content.isNotBlank()) {
-                                    viewModel.saveNote(id, title, content, type, isPinned, colorHex)
+                            onBackAndSave = { id, title, content, type, isPinned, colorHex, imageUris ->
+                                if (title.isNotBlank() || content.isNotBlank() || imageUris.isNotEmpty()) {
+                                    viewModel.saveNote(id, title, content, type, isPinned, colorHex, imageUris)
                                 }
                                 currentScreen = Screen.MAIN_NOTES
                             },
@@ -130,7 +130,8 @@ class MainActivity : ComponentActivity() {
                                     content = note.content,
                                     noteType = note.noteType,
                                     isPinned = note.isPinned,
-                                    colorHex = note.colorHex
+                                    colorHex = note.colorHex,
+                                    imageUris = note.imageUris
                                 )
                                 currentScreen = Screen.MAIN_NOTES
                             },

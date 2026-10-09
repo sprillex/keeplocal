@@ -215,6 +215,23 @@ class NotesViewModelTest {
     }
 
     @Test
+    fun testSaveNoteWithPictures() = runTest {
+        val imageUris = listOf("content://media/external/images/media/201")
+        viewModel.saveNote(
+            title = "Photo Note Test",
+            content = "Checking picture save in ViewModel",
+            noteType = NoteType.TEXT,
+            imageUris = imageUris
+        ).join()
+
+        val active = db.noteDao().getAllActiveNotes().first()
+        assertEquals(1, active.size)
+        assertEquals("Photo Note Test", active[0].title)
+        assertEquals(1, active[0].imageUris.size)
+        assertEquals("content://media/external/images/media/201", active[0].imageUris[0])
+    }
+
+    @Test
     fun testArchiveAndUnarchiveNote() = runTest {
         val note = NoteEntity(title = "Archive Test", content = "Content", noteType = NoteType.TEXT)
         val id = db.noteDao().insertNote(note)

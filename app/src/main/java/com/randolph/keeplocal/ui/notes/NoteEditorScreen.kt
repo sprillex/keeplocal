@@ -1,11 +1,16 @@
 package com.randolph.keeplocal.ui.notes
 
 import android.content.Intent
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,6 +27,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,7 +39,9 @@ import androidx.compose.material.icons.filled.AddBox
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
@@ -64,8 +73,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -74,6 +87,8 @@ import androidx.compose.ui.unit.sp
 import com.randolph.keeplocal.data.local.entity.NoteEntity
 import com.randolph.keeplocal.data.local.entity.NoteType
 import com.randolph.keeplocal.data.repository.SearchResult
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -93,7 +108,7 @@ val PASTEL_NOTE_COLORS = listOf(
 fun NoteEditorScreen(
     note: NoteEntity?,
     relatedContextMatches: List<SearchResult>,
-    onBackAndSave: (id: Long, title: String, content: String, noteType: NoteType, isPinned: Boolean, colorHex: String?) -> Unit,
+    onBackAndSave: (id: Long, title: String, content: String, noteType: NoteType, isPinned: Boolean, colorHex: String?, imageUris: List<String>) -> Unit,
     onDelete: (NoteEntity) -> Unit,
     onArchive: (NoteEntity) -> Unit,
     onQueryRelatedContext: (title: String, content: String) -> Unit,
@@ -105,6 +120,7 @@ fun NoteEditorScreen(
     var content by remember(note) { mutableStateOf(note?.content ?: "") }
     var isPinned by remember(note) { mutableStateOf(note?.isPinned ?: false) }
     var selectedNoteType by remember(note) { mutableStateOf(note?.noteType ?: NoteType.TEXT) }
+    var imageUris by remember(note) { mutableStateOf(note?.imageUris ?: emptyList()) }
     var selectedColor by remember(note) {
         mutableStateOf(
             if (note?.colorHex != null) {
@@ -116,6 +132,15 @@ fun NoteEditorScreen(
     var showMenu by remember { mutableStateOf(false) }
     var showColorPalette by remember { mutableStateOf(false) }
     var isDrawerExpanded by remember { mutableStateOf(false) }
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetMultipleContents()
+    ) { uris: List<Uri> ->
+        if (uris.isNotEmpty()) {
+            val newUris = uris.map { it.toString() }
+            imageUris = (imageUris + newUris).distinct()
+        }
+    }
 
     val formattedTime = remember(note) {
         val date = Date(note?.updatedAt ?: System.currentTimeMillis())
@@ -131,7 +156,7 @@ fun NoteEditorScreen(
 
     fun saveAndExit() {
         val finalColorHex = if (selectedColor == Color.Transparent) null else String.format("#%06X", 0xFFFFFF and selectedColor.toArgb())
-        onBackAndSave(note?.id ?: 0, title, content, selectedNoteType, isPinned, finalColorHex)
+        onBackAndSave(note?.id ?: 0, title, content, selectedNoteType, isPinned, finalColorHex, imageUris)
     }
 
     // Handle system back gesture
@@ -204,13 +229,15 @@ fun NoteEditorScreen(
                                     content = content,
                                     noteType = selectedNoteType,
                                     isPinned = isPinned,
-                                    colorHex = finalColorHex
+                                    colorHex = finalColorHex,
+                                    imageUris = imageUris
                                 ) ?: NoteEntity(
                                     title = title,
                                     content = content,
                                     noteType = selectedNoteType,
                                     isPinned = isPinned,
                                     colorHex = finalColorHex,
+                                    imageUris = imageUris,
                                     isArchived = true
                                 ))
                             }
@@ -368,7 +395,7 @@ fun NoteEditorScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = {
-                            Toast.makeText(context, "Attachment picker (Images & Media)", Toast.LENGTH_SHORT).show()
+                            imagePickerLauncher.launch("image/*")
                         }) {
                             Icon(Icons.Filled.AddBox, contentDescription = "Add Attachment", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -452,6 +479,25 @@ fun NoteEditorScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
+                if (imageUris.isNotEmpty()) {
+                    LazyRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(imageUris, key = { it }) { uriStr ->
+                            NoteImageThumbnail(
+                                uriString = uriStr,
+                                onRemove = {
+                                    imageUris = imageUris.filter { it != uriStr }
+                                }
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
                 // Borderless Body Input (MaterialTheme.typography.bodyLarge)
                 TextField(
                     value = content,
@@ -477,6 +523,77 @@ fun NoteEditorScreen(
                     )
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun NoteImageThumbnail(
+    uriString: String,
+    onRemove: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val bitmapState = remember(uriString) {
+        mutableStateOf<ImageBitmap?>(null)
+    }
+
+    LaunchedEffect(uriString) {
+        withContext(Dispatchers.IO) {
+            try {
+                val uri = Uri.parse(uriString)
+                val inputStream = context.contentResolver.openInputStream(uri)
+                val bitmap = BitmapFactory.decodeStream(inputStream)
+                inputStream?.close()
+                if (bitmap != null) {
+                    bitmapState.value = bitmap.asImageBitmap()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .size(120.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        val imageBitmap = bitmapState.value
+        if (imageBitmap != null) {
+            Image(
+                bitmap = imageBitmap,
+                contentDescription = "Attached Image",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Image,
+                    contentDescription = "Image Placeholder",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        IconButton(
+            onClick = onRemove,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .size(24.dp)
+                .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Close,
+                contentDescription = "Remove Image",
+                tint = Color.White,
+                modifier = Modifier.size(14.dp)
+            )
         }
     }
 }

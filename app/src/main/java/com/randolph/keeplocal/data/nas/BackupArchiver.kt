@@ -32,6 +32,10 @@ class BackupArchiver {
                 put("noteType", note.noteType.name)
                 put("isPinned", note.isPinned)
                 put("isArchived", note.isArchived)
+                put("colorHex", note.colorHex ?: JSONObject.NULL)
+                val imagesArray = JSONArray()
+                note.imageUris.forEach { imagesArray.put(it) }
+                put("imageUris", imagesArray)
                 put("reminderEpochMs", note.reminderEpochMs ?: JSONObject.NULL)
                 put("updatedAt", note.updatedAt)
             }
@@ -45,6 +49,13 @@ class BackupArchiver {
         val jsonArray = JSONArray(jsonString)
         for (i in 0 until jsonArray.length()) {
             val obj = jsonArray.getJSONObject(i)
+            val imagesList = mutableListOf<String>()
+            if (obj.has("imageUris") && !obj.isNull("imageUris")) {
+                val imgsArr = obj.getJSONArray("imageUris")
+                for (j in 0 until imgsArr.length()) {
+                    imagesList.add(imgsArr.getString(j))
+                }
+            }
             val note = NoteEntity(
                 id = obj.optLong("id", 0),
                 title = obj.getString("title"),
@@ -52,6 +63,8 @@ class BackupArchiver {
                 noteType = NoteType.valueOf(obj.getString("noteType")),
                 isPinned = obj.optBoolean("isPinned", false),
                 isArchived = obj.optBoolean("isArchived", false),
+                colorHex = if (obj.isNull("colorHex")) null else obj.optString("colorHex"),
+                imageUris = imagesList,
                 reminderEpochMs = if (obj.isNull("reminderEpochMs")) null else obj.optLong("reminderEpochMs"),
                 updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
             )
