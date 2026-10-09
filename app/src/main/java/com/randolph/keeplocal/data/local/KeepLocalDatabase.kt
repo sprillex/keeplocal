@@ -33,6 +33,10 @@ abstract class KeepLocalDatabase : RoomDatabase() {
         private var INSTANCE: KeepLocalDatabase? = null
 
         private fun createTriggers(db: SupportSQLiteDatabase) {
+            db.execSQL("DROP TRIGGER IF EXISTS notes_fts_ai;")
+            db.execSQL("DROP TRIGGER IF EXISTS notes_fts_ad;")
+            db.execSQL("DROP TRIGGER IF EXISTS notes_fts_au;")
+
             db.execSQL("""
                 CREATE TRIGGER IF NOT EXISTS notes_fts_ai AFTER INSERT ON notes BEGIN
                     INSERT INTO notes_fts(rowid, title, content) VALUES (new.id, new.title, new.content);
@@ -40,12 +44,12 @@ abstract class KeepLocalDatabase : RoomDatabase() {
             """.trimIndent())
             db.execSQL("""
                 CREATE TRIGGER IF NOT EXISTS notes_fts_ad AFTER DELETE ON notes BEGIN
-                    INSERT INTO notes_fts(notes_fts, rowid, title, content) VALUES('delete', old.id, old.title, old.content);
+                    DELETE FROM notes_fts WHERE rowid = old.id;
                 END;
             """.trimIndent())
             db.execSQL("""
                 CREATE TRIGGER IF NOT EXISTS notes_fts_au AFTER UPDATE ON notes BEGIN
-                    INSERT INTO notes_fts(notes_fts, rowid, title, content) VALUES('delete', old.id, old.title, old.content);
+                    DELETE FROM notes_fts WHERE rowid = old.id;
                     INSERT INTO notes_fts(rowid, title, content) VALUES (new.id, new.title, new.content);
                 END;
             """.trimIndent())
