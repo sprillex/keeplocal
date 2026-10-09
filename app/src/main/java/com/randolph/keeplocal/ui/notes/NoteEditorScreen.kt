@@ -16,6 +16,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -82,7 +84,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
@@ -92,10 +97,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.randolph.keeplocal.data.local.entity.NoteEntity
+import com.randolph.keeplocal.ui.components.KeepImageGrid
+import com.randolph.keeplocal.util.ImageDecoder
 import com.randolph.keeplocal.data.local.entity.NoteType
 import com.randolph.keeplocal.data.repository.SearchResult
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -116,6 +126,7 @@ val PASTEL_NOTE_COLORS = listOf(
 fun NoteEditorScreen(
     note: NoteEntity?,
     relatedContextMatches: List<SearchResult>,
+    onSaveDraft: (id: Long, title: String, content: String, noteType: NoteType, isPinned: Boolean, colorHex: String?, imageUris: List<String>) -> Unit,
     onBackAndSave: (id: Long, title: String, content: String, noteType: NoteType, isPinned: Boolean, colorHex: String?, imageUris: List<String>) -> Unit,
     onDelete: (NoteEntity) -> Unit,
     onArchive: (NoteEntity) -> Unit,
@@ -124,12 +135,16 @@ fun NoteEditorScreen(
 ) {
     val context = LocalContext.current
 
-    var title by remember(note) { mutableStateOf(note?.title ?: "") }
-    var content by remember(note) { mutableStateOf(note?.content ?: "") }
-    var isPinned by remember(note) { mutableStateOf(note?.isPinned ?: false) }
-    var selectedNoteType by remember(note) { mutableStateOf(note?.noteType ?: NoteType.TEXT) }
-    var imageUris by remember(note) { mutableStateOf(note?.imageUris ?: emptyList()) }
-    var selectedColor by remember(note) {
+    // Key remember on note identity (either note.id if > 0 or note's initial instance) so that draft auto-saves updating note.id do not wipe/re-initialize state mid-editing
+    val initialNoteId = remember { note?.id ?: 0L }
+    var currentSavedId by remember { mutableStateOf(note?.id ?: 0L) }
+
+    var title by remember(initialNoteId) { mutableStateOf(note?.title ?: "") }
+    var content by remember(initialNoteId) { mutableStateOf(note?.content ?: "") }
+    var isPinned by remember(initialNoteId) { mutableStateOf(note?.isPinned ?: false) }
+    var selectedNoteType by remember(initialNoteId) { mutableStateOf(note?.noteType ?: NoteType.TEXT) }
+    var imageUris by remember(initialNoteId) { mutableStateOf(note?.imageUris ?: emptyList()) }
+    var selectedColor by remember(initialNoteId) {
         mutableStateOf(
             if (note?.colorHex != null) {
                 try { Color(android.graphics.Color.parseColor(note.colorHex)) } catch (e: Exception) { Color.Transparent }
@@ -137,42 +152,80 @@ fun NoteEditorScreen(
         )
     }
 
+    // Keep track of updated note ID from ViewModel auto-saves without re-initializing local UI states
+    LaunchedEffect(note?.id) {
+        if (note != null && note.id != 0L) {
+            currentSavedId = note.id
+        }
+    }
+
     var showMenu by remember { mutableStateOf(false) }
     var showColorPalette by remember { mutableStateOf(false) }
     var isDrawerExpanded by remember { mutableStateOf(false) }
+    var selectedLightboxIndex by remember { mutableStateOf<Int?>(null) }
+
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents()
     ) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
-            val newUris = uris.map { it.toString() }
-            imageUris = (imageUris + newUris).distinct()
+            scope.launch {
+                val savedUris = mutableListOf<String>()
+                uris.forEach { uri ->
+                    try {
+                        context.contentResolver.takePersistableUriPermission(
+                            uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        )
+                    } catch (e: Exception) {
+                        // Ignore
+                    }
+                    val savedPath = ImageDecoder.saveImageToInternalStorage(context, uri)
+                    savedUris.add(savedPath)
+                }
+                imageUris = (imageUris + savedUris).distinct()
+            }
         }
     }
 
     val view = LocalView.current
     DisposableEffect(view) {
         val listener = OnReceiveContentListener { _, payload ->
-            val split = payload.partition { item ->
-                item.uri != null
-            }
+            val split = payload.partition { item -> item.uri != null }
             val imageClip = split.first
             val remaining = split.second
+
             if (imageClip != null) {
                 val clipData = imageClip.clip
-                val newUris = mutableListOf<String>()
+                val urisToSave = mutableListOf<Uri>()
                 for (i in 0 until clipData.itemCount) {
                     val uri = clipData.getItemAt(i).uri
                     if (uri != null) {
-                        newUris.add(uri.toString())
+                        urisToSave.add(uri)
                     }
                 }
-                if (newUris.isNotEmpty()) {
-                    imageUris = (imageUris + newUris).distinct()
-                    Toast.makeText(context, "Pasted ${newUris.size} image(s)", Toast.LENGTH_SHORT).show()
+                if (urisToSave.isNotEmpty()) {
+                    scope.launch {
+                        val savedUris = mutableListOf<String>()
+                        urisToSave.forEach { uri ->
+                            try {
+                                context.contentResolver.takePersistableUriPermission(
+                                    uri,
+                                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                )
+                            } catch (e: Exception) {
+                                // Ignore
+                            }
+                            val savedPath = ImageDecoder.saveImageToInternalStorage(context, uri)
+                            savedUris.add(savedPath)
+                        }
+                        imageUris = (imageUris + savedUris).distinct()
+                        Toast.makeText(context, "Pasted ${savedUris.size} image(s)", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
-            remaining
+            null // Consume image payload completely so text fields do not receive \uFFFC
         }
         ViewCompat.setOnReceiveContentListener(view, arrayOf("image/*"), listener)
         onDispose {
@@ -192,9 +245,24 @@ fun NoteEditorScreen(
         }
     }
 
+    fun performAutoSave() {
+        if (title.isNotBlank() || content.isNotBlank() || imageUris.isNotEmpty()) {
+            val finalColorHex = if (selectedColor == Color.Transparent) null else String.format("#%06X", 0xFFFFFF and selectedColor.toArgb())
+            onSaveDraft(currentSavedId, title, content, selectedNoteType, isPinned, finalColorHex, imageUris)
+        }
+    }
+
+    // Auto-save whenever image attachments are added or updated
+    val noteImageUris = note?.imageUris ?: emptyList<String>()
+    LaunchedEffect(imageUris) {
+        if (imageUris.isNotEmpty() && imageUris != noteImageUris) {
+            performAutoSave()
+        }
+    }
+
     fun saveAndExit() {
         val finalColorHex = if (selectedColor == Color.Transparent) null else String.format("#%06X", 0xFFFFFF and selectedColor.toArgb())
-        onBackAndSave(note?.id ?: 0, title, content, selectedNoteType, isPinned, finalColorHex, imageUris)
+        onBackAndSave(currentSavedId, title, content, selectedNoteType, isPinned, finalColorHex, imageUris)
     }
 
     // Handle system back gesture
@@ -318,7 +386,6 @@ fun NoteEditorScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(if (selectedColor == Color.Transparent) MaterialTheme.colorScheme.surface else selectedColor)
-                    .imePadding()
                     .navigationBarsPadding()
             ) {
                 // Collapsible Related Local Notes Drawer
@@ -502,7 +569,7 @@ fun NoteEditorScreen(
                 // Borderless Title Input (MaterialTheme.typography.titleLarge)
                 TextField(
                     value = title,
-                    onValueChange = { title = it },
+                    onValueChange = { title = sanitizeText(it) },
                     placeholder = {
                         Text(
                             text = "Title",
@@ -532,29 +599,28 @@ fun NoteEditorScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 if (imageUris.isNotEmpty()) {
-                    Column(
+                    KeepImageGrid(
+                        imageUris = imageUris,
+                        maxHeight = 240.dp,
+                        onImageClick = { index ->
+                            selectedLightboxIndex = index
+                        },
+                        onImageRemove = { index ->
+                            if (index in imageUris.indices) {
+                                imageUris = imageUris.toMutableList().apply { removeAt(index) }
+                            }
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        for (uriStr in imageUris) {
-                            NoteImageThumbnail(
-                                uriString = uriStr,
-                                onRemove = {
-                                    imageUris = imageUris.filter { it != uriStr }
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
+                            .padding(vertical = 8.dp)
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
                 // Borderless Body Input (MaterialTheme.typography.bodyLarge)
                 TextField(
                     value = content,
-                    onValueChange = { content = it },
+                    onValueChange = { content = sanitizeText(it) },
                     placeholder = {
                         Text(
                             text = "Note",
@@ -578,6 +644,175 @@ fun NoteEditorScreen(
             }
         }
     }
+
+    selectedLightboxIndex?.let { index ->
+        if (index in imageUris.indices) {
+            LightboxModal(
+                imageUris = imageUris,
+                initialIndex = index,
+                onDismiss = { selectedLightboxIndex = null }
+            )
+        }
+    }
+}
+
+@Composable
+fun LightboxModal(
+    imageUris: List<String>,
+    initialIndex: Int,
+    onDismiss: () -> Unit
+) {
+    var currentIndex by remember { mutableStateOf(initialIndex) }
+    val context = LocalContext.current
+    val currentUri = imageUris.getOrNull(currentIndex) ?: return
+
+    var scale by remember(currentUri) { mutableStateOf(1f) }
+    var offset by remember(currentUri) { mutableStateOf(Offset.Zero) }
+
+    val bitmapState = remember(currentUri) { mutableStateOf<ImageBitmap?>(null) }
+
+    LaunchedEffect(currentUri) {
+        bitmapState.value = ImageDecoder.loadDownsampledBitmap(context, currentUri, 1200, 1600)
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            val bitmap = bitmapState.value
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = "Full view image",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(currentUri) {
+                            detectTapGestures(
+                                onDoubleTap = {
+                                    if (scale > 1f) {
+                                        scale = 1f
+                                        offset = Offset.Zero
+                                    } else {
+                                        scale = 2.5f
+                                    }
+                                }
+                            )
+                        }
+                        .pointerInput(currentUri) {
+                            detectTransformGestures { _, pan, zoom, _ ->
+                                scale = (scale * zoom).coerceIn(1f, 5f)
+                                if (scale > 1f) {
+                                    offset += pan
+                                } else {
+                                    offset = Offset.Zero
+                                }
+                            }
+                        }
+                        .graphicsLayer(
+                            scaleX = scale,
+                            scaleY = scale,
+                            translationX = offset.x,
+                            translationY = offset.y
+                        )
+                )
+            } else {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Image,
+                        contentDescription = "Loading image",
+                        tint = Color.White.copy(alpha = 0.5f),
+                        modifier = Modifier.size(64.dp)
+                    )
+                }
+            }
+
+            // Top bar overlay with close button and index indicator
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .align(Alignment.TopCenter),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = "Close preview",
+                        tint = Color.White
+                    )
+                }
+
+                if (imageUris.size > 1) {
+                    Text(
+                        text = "${currentIndex + 1} of ${imageUris.size}",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White,
+                        modifier = Modifier
+                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
+            }
+
+            // Navigation overlays for multi-image lightbox
+            if (imageUris.size > 1) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 32.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    if (currentIndex > 0) {
+                        Surface(
+                            onClick = { currentIndex-- },
+                            shape = CircleShape,
+                            color = Color.Black.copy(alpha = 0.6f),
+                            contentColor = Color.White
+                        ) {
+                            Text(
+                                text = "◄ Previous",
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                        }
+                    }
+                    if (currentIndex < imageUris.size - 1) {
+                        Surface(
+                            onClick = { currentIndex++ },
+                            shape = CircleShape,
+                            color = Color.Black.copy(alpha = 0.6f),
+                            contentColor = Color.White
+                        ) {
+                            Text(
+                                text = "Next ►",
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fun sanitizeText(text: String): String {
+    return text.replace("\uFFFC", "").replace("\uFFFD", "")
 }
 
 fun pasteImageFromClipboard(context: Context): List<String> {
