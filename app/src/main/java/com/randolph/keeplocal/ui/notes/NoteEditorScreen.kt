@@ -134,17 +134,28 @@ fun NoteEditorScreen(
 ) {
     val context = LocalContext.current
 
-    var title by remember(note?.id) { mutableStateOf(note?.title ?: "") }
-    var content by remember(note?.id) { mutableStateOf(note?.content ?: "") }
-    var isPinned by remember(note?.id) { mutableStateOf(note?.isPinned ?: false) }
-    var selectedNoteType by remember(note?.id) { mutableStateOf(note?.noteType ?: NoteType.TEXT) }
-    var imageUris by remember(note?.id) { mutableStateOf(note?.imageUris ?: emptyList()) }
-    var selectedColor by remember(note?.id) {
+    // Key remember on note identity (either note.id if > 0 or note's initial instance) so that draft auto-saves updating note.id do not wipe/re-initialize state mid-editing
+    val initialNoteId = remember { note?.id ?: 0L }
+    var currentSavedId by remember { mutableStateOf(note?.id ?: 0L) }
+
+    var title by remember(initialNoteId) { mutableStateOf(note?.title ?: "") }
+    var content by remember(initialNoteId) { mutableStateOf(note?.content ?: "") }
+    var isPinned by remember(initialNoteId) { mutableStateOf(note?.isPinned ?: false) }
+    var selectedNoteType by remember(initialNoteId) { mutableStateOf(note?.noteType ?: NoteType.TEXT) }
+    var imageUris by remember(initialNoteId) { mutableStateOf(note?.imageUris ?: emptyList()) }
+    var selectedColor by remember(initialNoteId) {
         mutableStateOf(
             if (note?.colorHex != null) {
                 try { Color(android.graphics.Color.parseColor(note.colorHex)) } catch (e: Exception) { Color.Transparent }
             } else Color.Transparent
         )
+    }
+
+    // Keep track of updated note ID from ViewModel auto-saves without re-initializing local UI states
+    LaunchedEffect(note?.id) {
+        if (note != null && note.id != 0L) {
+            currentSavedId = note.id
+        }
     }
 
     var showMenu by remember { mutableStateOf(false) }
@@ -236,7 +247,7 @@ fun NoteEditorScreen(
     fun performAutoSave() {
         if (title.isNotBlank() || content.isNotBlank() || imageUris.isNotEmpty()) {
             val finalColorHex = if (selectedColor == Color.Transparent) null else String.format("#%06X", 0xFFFFFF and selectedColor.toArgb())
-            onBackAndSave(note?.id ?: 0, title, content, selectedNoteType, isPinned, finalColorHex, imageUris)
+            onBackAndSave(currentSavedId, title, content, selectedNoteType, isPinned, finalColorHex, imageUris)
         }
     }
 
@@ -250,7 +261,7 @@ fun NoteEditorScreen(
 
     fun saveAndExit() {
         val finalColorHex = if (selectedColor == Color.Transparent) null else String.format("#%06X", 0xFFFFFF and selectedColor.toArgb())
-        onBackAndSave(note?.id ?: 0, title, content, selectedNoteType, isPinned, finalColorHex, imageUris)
+        onBackAndSave(currentSavedId, title, content, selectedNoteType, isPinned, finalColorHex, imageUris)
     }
 
     // Handle system back gesture
