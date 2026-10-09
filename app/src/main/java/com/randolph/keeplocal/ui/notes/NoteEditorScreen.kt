@@ -532,18 +532,19 @@ fun NoteEditorScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 if (imageUris.isNotEmpty()) {
-                    LazyRow(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        items(imageUris, key = { it }) { uriStr ->
+                        for (uriStr in imageUris) {
                             NoteImageThumbnail(
                                 uriString = uriStr,
                                 onRemove = {
                                     imageUris = imageUris.filter { it != uriStr }
-                                }
+                                },
+                                modifier = Modifier.fillMaxWidth()
                             )
                         }
                     }
@@ -637,8 +638,9 @@ fun NoteImageThumbnail(
 
     Box(
         modifier = modifier
-            .size(120.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .fillMaxWidth()
+            .height(240.dp)
+            .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
     ) {
         val imageBitmap = bitmapState.value
@@ -657,7 +659,8 @@ fun NoteImageThumbnail(
                 Icon(
                     imageVector = Icons.Filled.Image,
                     contentDescription = "Image Placeholder",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(48.dp)
                 )
             }
         }
@@ -666,14 +669,15 @@ fun NoteImageThumbnail(
             onClick = onRemove,
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .size(24.dp)
+                .padding(8.dp)
+                .size(32.dp)
                 .background(Color.Black.copy(alpha = 0.6f), CircleShape)
         ) {
             Icon(
                 imageVector = Icons.Filled.Close,
                 contentDescription = "Remove Image",
                 tint = Color.White,
-                modifier = Modifier.size(14.dp)
+                modifier = Modifier.size(18.dp)
             )
         }
     }
