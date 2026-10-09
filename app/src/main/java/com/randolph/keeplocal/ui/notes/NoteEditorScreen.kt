@@ -1,9 +1,14 @@
 package com.randolph.keeplocal.ui.notes
 
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.widget.Toast
+import androidx.core.view.ContentInfoCompat
+import androidx.core.view.OnReceiveContentListener
+import androidx.core.view.ViewCompat
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -40,6 +45,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -66,12 +72,14 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -142,6 +150,36 @@ fun NoteEditorScreen(
         }
     }
 
+    val view = LocalView.current
+    DisposableEffect(view) {
+        val listener = OnReceiveContentListener { _, payload ->
+            val split = payload.partition { item ->
+                item.uri != null
+            }
+            val imageClip = split.first
+            val remaining = split.second
+            if (imageClip != null) {
+                val clipData = imageClip.clip
+                val newUris = mutableListOf<String>()
+                for (i in 0 until clipData.itemCount) {
+                    val uri = clipData.getItemAt(i).uri
+                    if (uri != null) {
+                        newUris.add(uri.toString())
+                    }
+                }
+                if (newUris.isNotEmpty()) {
+                    imageUris = (imageUris + newUris).distinct()
+                    Toast.makeText(context, "Pasted ${newUris.size} image(s)", Toast.LENGTH_SHORT).show()
+                }
+            }
+            remaining
+        }
+        ViewCompat.setOnReceiveContentListener(view, arrayOf("image/*"), listener)
+        onDispose {
+            ViewCompat.setOnReceiveContentListener(view, arrayOf("image/*"), null)
+        }
+    }
+
     val formattedTime = remember(note) {
         val date = Date(note?.updatedAt ?: System.currentTimeMillis())
         SimpleDateFormat("h:mm a", Locale.getDefault()).format(date)
@@ -207,6 +245,20 @@ fun NoteEditorScreen(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false }
                     ) {
+                        DropdownMenuItem(
+                            text = { Text("Paste Image") },
+                            onClick = {
+                                showMenu = false
+                                val pasted = pasteImageFromClipboard(context)
+                                if (pasted.isNotEmpty()) {
+                                    imageUris = (imageUris + pasted).distinct()
+                                    Toast.makeText(context, "Pasted ${pasted.size} image(s) from clipboard", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "No image found in clipboard", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            leadingIcon = { Icon(Icons.Filled.ContentPaste, contentDescription = null) }
+                        )
                         DropdownMenuItem(
                             text = { Text("Delete") },
                             onClick = {
@@ -480,18 +532,19 @@ fun NoteEditorScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 if (imageUris.isNotEmpty()) {
-                    LazyRow(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        items(imageUris, key = { it }) { uriStr ->
+                        for (uriStr in imageUris) {
                             NoteImageThumbnail(
                                 uriString = uriStr,
                                 onRemove = {
                                     imageUris = imageUris.filter { it != uriStr }
-                                }
+                                },
+                                modifier = Modifier.fillMaxWidth()
                             )
                         }
                     }
@@ -527,6 +580,35 @@ fun NoteEditorScreen(
     }
 }
 
+fun pasteImageFromClipboard(context: Context): List<String> {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    val clipData = clipboard.primaryClip ?: return emptyList()
+    val pastedUris = mutableListOf<String>()
+    for (i in 0 until clipData.itemCount) {
+        val item = clipData.getItemAt(i)
+        val uri = item.uri
+        if (uri != null) {
+            val type = try { context.contentResolver.getType(uri) } catch (e: Exception) { null }
+            if (type == null || type.startsWith("image/")) {
+                pastedUris.add(uri.toString())
+            }
+        } else {
+            val text = item.text?.toString()?.trim() ?: ""
+            if (text.startsWith("content://") || text.startsWith("file://") || text.startsWith("http://") || text.startsWith("https://")) {
+                val isImg = text.endsWith(".png", true) ||
+                        text.endsWith(".jpg", true) ||
+                        text.endsWith(".jpeg", true) ||
+                        text.endsWith(".webp", true) ||
+                        text.contains("image", true)
+                if (isImg) {
+                    pastedUris.add(text)
+                }
+            }
+        }
+    }
+    return pastedUris
+}
+
 @Composable
 fun NoteImageThumbnail(
     uriString: String,
@@ -556,8 +638,9 @@ fun NoteImageThumbnail(
 
     Box(
         modifier = modifier
-            .size(120.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .fillMaxWidth()
+            .height(240.dp)
+            .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
     ) {
         val imageBitmap = bitmapState.value
@@ -576,7 +659,8 @@ fun NoteImageThumbnail(
                 Icon(
                     imageVector = Icons.Filled.Image,
                     contentDescription = "Image Placeholder",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(48.dp)
                 )
             }
         }
@@ -585,14 +669,15 @@ fun NoteImageThumbnail(
             onClick = onRemove,
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .size(24.dp)
+                .padding(8.dp)
+                .size(32.dp)
                 .background(Color.Black.copy(alpha = 0.6f), CircleShape)
         ) {
             Icon(
                 imageVector = Icons.Filled.Close,
                 contentDescription = "Remove Image",
                 tint = Color.White,
-                modifier = Modifier.size(14.dp)
+                modifier = Modifier.size(18.dp)
             )
         }
     }
